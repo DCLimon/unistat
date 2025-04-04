@@ -1,0 +1,37 @@
+[project]
+name = "unistat"
+version = "0.1.0"
+description = "A unified statistics interface for running and displaying simple stats, using SciPy and statsmodels."
+readme = "README.md"
+authors = [
+    { name = "dclimon", email = "dclimon@gmail.com" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=2.2.4",
+    "pandas>=2.2.3",
+    "scipy>=1.15.2",
+    "statsmodels>=0.14.4",
+]
+
+[project.scripts]
+unistat = "unistat:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+sources = ["src"]
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple/"
+publish-url = "https://upload.pypi.org/legacy/"
+explicit = true
+
+[[tool.uv.index]]
+name = "testpypi"
+url = "https://test.pypi.org/simple/"
+publish-url = "https://test.pypi.org/legacy/"
+explicit = true
