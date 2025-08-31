@@ -4,21 +4,36 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 import statsmodels.api as sm
+from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 
 class RegressionStats(ABC):
     def __init__(self, X, y, bool_col_names: list | str | None = None):
         self._df = self._concat_xy(X, y)
         self.bool_cols = bool_col_names
-        self.X = self._df.drop(columns=[y.name])
-        self.y = self._df[[y.name]]
+        self.X = (
+            self._df.drop(columns=[y.name])
+            .apply(pd.to_numeric, errors='coerce')
+            .astype('float64')
+        )
+        self.y = (
+            self._df[[y.name]]
+            .apply(pd.to_numeric, errors='coerce')
+            .astype('float64')
+        )
         self.reg = None
         self.std_reg = None
 
     def __str__(self):
-        print_string = f'{self.reg.summary2()}\n'
+        if len(self.X.columns) >= 2:
+            print_string = (f'{str(self.vif_matrix())}\n'
+                            f'{self.reg.summary2().as_text()}\n')
+        else:
+            print_string = f'{self.reg.summary2().as_text()}\n'
+
         if not self._all_bool_cols:
-            print_string += f'{self.std_reg.summary2()}\n'
+            print_string += f'{self.std_reg.summary2().as_text()}\n'
+
         return print_string
 
     @property
@@ -73,13 +88,13 @@ class RegressionStats(ABC):
             exog = self.X_std
         endog = self.y
 
-        logit = sm.OLS(
+        reg = sm.OLS(
             endog=endog,
             exog=sm.add_constant(exog),
             missing='drop'
         ).fit()
 
-        return logit
+        return reg
 
     @property
     def reg(self):
@@ -103,6 +118,20 @@ class RegressionStats(ABC):
         else:
             self._std_reg = result
 
+    def vif_matrix(self):
+        if len(self.X.columns) < 2:
+            raise ValueError('VIF requires at least 2 columns')
+        X = self.X.dropna().astype(float)
+
+        vif_matrix = pd.Series(
+            [variance_inflation_factor(X.values, i)
+             for i in range(X.shape[1])],
+            name='vif',
+            index=X.columns,
+        )
+
+        return vif_matrix
+
     @staticmethod
     def _concat_xy(X, y):
         df = pd.concat([X, y], axis='columns').dropna(axis='index')
@@ -121,15 +150,24 @@ class LogitStats(RegressionStats):
         super().__init__(X, y, bool_col_names)
 
     def __str__(self):
-        print_string = (
-            f'{self.reg.summary2()}\n'
-            f'{self.logit_or()}\n'
-        )
+        if len(self.X.columns) >= 2:
+            print_string = (
+                f'{str(self.vif_matrix())}\n'
+                f'{self.reg.summary2().as_text()}\n'
+                f'{self.logit_or()}\n'
+            )
+        else:
+            print_string = (
+                f'{self.reg.summary2().as_text()}\n'
+                f'{self.logit_or()}\n'
+            )
+
         if not self._all_bool_cols:
             print_string += (
-                f'{self.std_reg.summary2()}\n'
+                f'{self.std_reg.summary2().as_text()}\n'
                 f'{self.logit_or(standardize=True)}\n'
             )
+
         return print_string
 
     def _run_regression(self, standardize: bool = False):
@@ -203,13 +241,13 @@ class LinRegStats(RegressionStats):
                 exog = self.X_std
         endog = self.y
 
-        logit = sm.OLS(
+        reg = sm.OLS(
             endog=endog,
             exog=sm.add_constant(exog),
             missing='drop'
         ).fit()
 
-        return logit
+        return reg
 
     def pretty_print_coefs(self,
                            standardize: bool = False,

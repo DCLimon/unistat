@@ -1,4 +1,4 @@
-
+import warnings
 from collections import namedtuple
 import numpy as np
 import pandas as pd
@@ -49,19 +49,21 @@ class CorrStats:
         return self.result.pvalue
 
 
-class TwoSampleStats:
+class TwoSeriesStats:
     def __init__(self,
-                 bool_x: pd.Series, num_y: pd.Series,
+                 test: pd.Series,
+                 control: pd.Series,
                  parametric: bool = True,
-                 alpha_level: float = .05,
-                 x_test_lvl: bool = True):
-        self._df = (pd.concat([bool_x, num_y], axis='columns')
-                    .dropna(axis='index'))
-        self.x = self._df[bool_x.name]
-        self.y = self._df[num_y.name]
+                 alpha_level: float = .05):
+        if test.name == control.name:
+            warnings.warn('`test` and `control` have the same column name.')
+            test = test.rename(f'{test.name}_TEST')
+            control = control.rename(f'{test.name}_CTRL')
+        self.test = test.dropna().reset_index(drop=True)
+        self.control = control.dropna().reset_index(drop=True)
+        self.control = control.dropna()
         self.parametric = parametric
         self.alpha = alpha_level
-        self._test_x = x_test_lvl
 
     def __str__(self):
         if self.parametric:
@@ -71,31 +73,17 @@ class TwoSampleStats:
             return (f'{self.nonparametric_summ_stats()}\n'
                     f'{self.mwu_test()}')
 
-    @property
-    def control(self):
-        if self._test_x:
-            return self._df.loc[~self._df[self.x.name], self.y.name]
-        else:
-            return self._df.loc[self._df[self.x.name], self.y.name]
-
-    @property
-    def test(self):
-        if self._test_x:
-            return self._df.loc[self._df[self.x.name], self.y.name]
-        else:
-            return self._df.loc[~self._df[self.x.name], self.y.name]
-
-    def conf_int(self, alpha_level: float = None):
-        if alpha_level is None:
-            alpha_level = self.alpha
+    def conf_int(self, pct_ci: float = None):
+        if pct_ci is None:
+            pct_ci = 1 - self.alpha
 
         test_ci = stats.norm.interval(
-            1 - alpha_level,
+            pct_ci,
             loc=self.test.mean(),
             scale=self.test.std(ddof=1) / np.sqrt(self.test.count())
         )
         control_ci = stats.norm.interval(
-            1 - alpha_level,
+            pct_ci,
             loc=self.control.mean(),
             scale=self.control.std(ddof=1) / np.sqrt(self.control.count())
         )
@@ -105,11 +93,11 @@ class TwoSampleStats:
         if alpha_level is None:
             alpha_level = self.alpha
 
-        ci_res = self.conf_int(alpha_level)
+        ci_res = self.conf_int(1 - alpha_level)
 
         summ_stats = pd.DataFrame(
             data={
-                'Test': {
+                self.test.name: {
                     'n': self.test.count(),
                     'mean': self.test.mean(),
                     'std': self.test.std(),
@@ -119,7 +107,7 @@ class TwoSampleStats:
                     f'{100 * (1 - alpha_level):.0f}%_CI_upper': ci_res.test[1],
                 },
 
-                'Control': {
+                self.control.name: {
                     'n': self.control.count(),
                     'mean': self.control.mean(),
                     'std': self.control.std(),
@@ -163,7 +151,7 @@ class TwoSampleStats:
 
         summ_stats = pd.DataFrame(
             data={
-                'Test': {
+                self.test.name: {
                     'n': self.test.count(),
                     'min': q_test.loc[0],
                     'q1': q_test.loc[0.25],
@@ -175,7 +163,7 @@ class TwoSampleStats:
 
                 'Ha': '=',
 
-                'Control': {
+                self.control.name: {
                     'n': self.control.count(),
                     'min': q_control.loc[0],
                     'q1': q_control.loc[0.25],
@@ -214,6 +202,67 @@ class TwoSampleStats:
             }
         )
         return desc_stats
+
+
+class TwoSampleStats(TwoSeriesStats):
+    def __init__(self,
+                 bool_x: pd.Series, num_y: pd.Series,
+                 parametric: bool = True,
+                 alpha_level: float = .05,
+                 x_test_lvl: bool = True):
+        # Ensure names exist and are not the same
+        bool_x = bool_x.rename(bool_x.name or 'x')
+        num_y = num_y.rename(num_y.name or 'y')
+        if bool_x.name == num_y.name:
+            raise ValueError('Both bool_x and num_y cannot have same names.')
+
+        # Concat into a df in order to .dropna, then define x & y series
+        self._df = (
+            pd.concat(
+                [
+                    bool_x.astype('boolean'),
+                    num_y,
+                ],
+                axis='columns'
+            )
+            .dropna(axis='index')
+        )
+        self.x = self._df[bool_x.name]
+        self.y = self._df[num_y.name]
+
+        # Build mask to slice test/control base on x_test_lvl
+        self._test_x = bool(x_test_lvl)  # Ensure is type bool
+        mask = (self.x == self._test_x).astype(bool)  # ensure safe masking
+
+        # self.test is value of y where x == x_test_lvl
+        test = (
+            self.y[mask]
+            .rename(f'{self.x.name}_{str(self._test_x).upper()}')
+        )
+
+        control = (
+            self.y[~mask]
+            .rename(f'{self.x.name}_{str((not self._test_x)).upper()}')
+        )
+
+        if test.empty or control.empty:
+            raise ValueError('After cleaning/splitting, at least one group is '
+                             'empty. Check x_test_lvl and values in bool_x.')
+
+        super().__init__(test=test,
+                         control=control,
+                         parametric=parametric,
+                         alpha_level=alpha_level)
+
+    def __str__(self):
+        if self.parametric:
+            return (f'Outcome: {self.y.name}\n'
+                    f'{self.parametric_summ_stats()}\n'
+                    f'{self.t_test()}')
+        else:
+            return (f'Outcome: {self.y.name}\n'
+                    f'{self.nonparametric_summ_stats()}\n'
+                    f'{self.mwu_test()}')
 
 
 ControlTestStats = namedtuple('ControlTestStats',
