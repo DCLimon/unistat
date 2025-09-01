@@ -1,4 +1,5 @@
 
+import warnings
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
@@ -277,6 +278,102 @@ class LinRegStats(RegressionStats):
             print_string = (
                 f'{row['Coef']:.3f} '
                 f'({row['95% CI lower']:.3f} - {row['95% CI upper']:.3f})'
+            )
+            if label:
+                print_string = f'{idx}: ' + print_string
+
+            print(print_string)
+
+
+class LogBinStats(RegressionStats):
+    def __init__(self, X, y, bool_col_names: list | str | None = None):
+        warnings.warn('''
+            This feature is experimental and has not been fully tested nor 
+            optimized; calculations may be incorrect, and/or errors may occur. 
+            In critical applications, output should be verified for accuracy 
+            and/or LogitStats preferred instead.
+        ''')
+        super().__init__(X, y, bool_col_names)
+
+    def __str__(self):
+        if len(self.X.columns) >= 2:
+            print_string = (
+                f'{str(self.vif_matrix())}\n'
+                f'{self.reg.summary2().as_text()}\n'
+                f'{self.logbin_rr()}\n'
+            )
+        else:
+            print_string = (
+                f'{self.reg.summary2().as_text()}\n'
+                f'{self.logbin_rr()}\n'
+            )
+
+        if not self._all_bool_cols:
+            print_string += (
+                f'{self.std_reg.summary2().as_text()}\n'
+                f'{self.logbin_rr(standardize=True)}\n'
+            )
+
+        return print_string
+
+    def _run_regression(self, standardize: bool = False):
+        if not standardize:
+            exog = self.X
+        else:
+            if self._all_bool_cols:
+                return None
+            else:
+                exog = self.X_std
+        endog = self.y
+
+        logbin = sm.GLM(
+            endog=endog,
+            exog=sm.add_constant(exog),
+            family=sm.families.Binomial(link=sm.families.links.Log()),
+            missing='drop'
+        ).fit(
+            start_params=(
+                [np.log(0.5)]
+                + [np.float64(0) for i in range(0, len(self.X.columns))]
+            ),
+            method='irls',
+            maxiter=1000
+        )
+
+        return logbin
+
+    def logbin_rr(self, standardize: bool = False) -> pd.DataFrame:
+        if standardize:
+            if not self._all_bool_cols:
+                model = self.std_reg
+            else:
+                raise ValueError('Standardized logit cannot be run when all '
+                                 'columns are boolean.')
+        else:
+            model = self.reg
+
+        output = pd.DataFrame(np.exp(model.params), columns=['RR'])
+        output[['95% CI lower', '95% CI upper']] = model.conf_int()
+        return output.map(np.exp)
+
+    def pretty_print_rr(self,
+                        standardize: bool = False,
+                        label: bool = True) -> None:
+        if standardize:
+            if self._all_bool_cols:
+                raise ValueError('Standardized logit cannot be run when all '
+                                 'columns are boolean.')
+            else:
+                ratios = self.logbin_rr(standardize=True)
+        else:
+            ratios = self.logbin_rr()
+
+        for idx in ratios.index:
+            row = ratios.loc[idx, :]
+
+            print_string = (
+                f'OR {row['OR']:.2f} '
+                f'({row['95% CI lower']:.2f} - {row['95% CI upper']:.2f})'
             )
             if label:
                 print_string = f'{idx}: ' + print_string
