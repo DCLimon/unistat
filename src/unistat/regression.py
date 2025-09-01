@@ -1,11 +1,11 @@
 
-import warnings
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
 from scipy import stats
 import statsmodels.api as sm
 from statsmodels.stats.outliers_influence import variance_inflation_factor
+from .exceptions import warn_experimental
 
 
 class RegressionStats(ABC):
@@ -57,7 +57,7 @@ class RegressionStats(ABC):
         elif bool_col_names is None:
             self._bool_cols = None
         else:
-            raise ValueError("bool_col_names must be a str or list of str")
+            raise ValueError('bool_col_names must be a str or list of str')
 
     @property
     def X_std(self):
@@ -257,7 +257,7 @@ class LinRegStats(RegressionStats):
         if standardize:
             if self._all_bool_cols:
                 raise ValueError('Standardized LinReg cannot be run when all '
-                             'columns are boolean.')
+                                 'columns are boolean.')
             else:
                 reg = self.std_reg
         else:
@@ -287,7 +287,7 @@ class LinRegStats(RegressionStats):
 
 class LogBinStats(RegressionStats):
     def __init__(self, X, y, bool_col_names: list | str | None = None):
-        warnings.warn('''
+        warn_experimental('''
             This feature is experimental and has not been fully tested nor 
             optimized; calculations may be incorrect, and/or errors may occur. 
             In critical applications, output should be verified for accuracy 

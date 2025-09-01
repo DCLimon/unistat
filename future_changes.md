@@ -12,14 +12,9 @@ Future changes for new versions of `unistat`
 
 ## Implement integration tests
 
-## Implement `exceptions.py`
+## Implement error handling
 
-* Should include both exceptions & warnings
-* See ChatGPT for details
-* Minimum:
-  * `ExperimentalWarning` for experimental features
-  * `SeriesNameCollisionError` for if two series have the same name
-    * Useful in `TwoSampleStats` & `TwoSeriesStats`
+* Should probably implement an error for when calling a standardized regression but all predictor columns are Boolean
 
 ## Implement a univariate summary stats caller
 
