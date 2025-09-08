@@ -21,6 +21,15 @@ Future changes for new versions of `unistat`
 * see `summ_stats()` & `groupby_summ_stats` in `ax-subclav` project
 * Should basically allow a univariate or by-category Table 1 to be made easily
 
+## Changes to `resamping.py`
+
+### Bootstrapping classes
+
+* Unbiased calculation of p-values using bootstrapped distribution under the null hypothesis
+
+### Permutation classes
+
+* Support for regression models
 
 ## Changes to `TwoSampleStats`
 
