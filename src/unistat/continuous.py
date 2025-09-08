@@ -61,7 +61,6 @@ class TwoSeriesStats:
             control = control.rename(f'{test.name}_CTRL')
         self.test = test.dropna().reset_index(drop=True)
         self.control = control.dropna().reset_index(drop=True)
-        self.control = control.dropna()
         self.parametric = parametric
         self.alpha = alpha_level
 
@@ -134,8 +133,10 @@ class TwoSeriesStats:
         output = pd.Series(
             {
                 't-statistic': result.statistic,
-                'scipy_df': result.df,
-                'calc_df': (self.test.count() - 1) + (self.control.count() - 1),
+                'welch_df': result.df,
+                'student_df': (
+                    (self.test.count() - 1) + (self.control.count() - 1)
+                ),
                 'p-value': result.pvalue,
             }
         )
