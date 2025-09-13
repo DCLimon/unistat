@@ -109,6 +109,8 @@ class MulticlassContingencyStats:
         #
         #     )
 
+        chi2 = self.chi2()
+
         print(f'{self.row_title} vs. {self.col_title}\n', '='*40)
         print(f'Table (# Obs):\n'
               f'{self.table()}')
@@ -117,8 +119,8 @@ class MulticlassContingencyStats:
               f'{self.table(as_pct=True)}')
         print('-'*40,
               f'\nChi^2 ToI:\n'
-              f'X^2({self.chi2().dof}) = {self.chi2().statistic:.3f}, '
-              f'p = {self.chi2().pvalue:.4f}')
+              f'X^2({chi2.dof}) = {chi2.statistic:.3f}, '
+              f'p = {chi2.pvalue:.4f}')
         print('-'*40, '\n')
 
 
@@ -145,6 +147,8 @@ class BooleanContingencyStats(MulticlassContingencyStats):
         return p_val
 
     def print_results(self):
+        chi2 = self.chi2()
+
         print(f'{self.row_title} vs. {self.col_title}\n', '='*40)
         print(f'Table (# Obs):\n'
               f'{self.table()}')
@@ -158,8 +162,8 @@ class BooleanContingencyStats(MulticlassContingencyStats):
               f'{self.odds_ratio().confidence_interval().high:.4f}')
         print('-'*40,
               f'\nChi^2 ToI:\n'
-              f'X^2({self.chi2().dof}) = {self.chi2().statistic:.3f}, '
-              f'p = {self.chi2().pvalue:.4f}')
+              f'X^2({chi2.dof}) = {chi2.statistic:.3f}, '
+              f'p = {chi2.pvalue:.4f}')
         print('-'*40,
               f'\nFisher Exact Test:\n'
               f'p = {self.fisher_exact():.4f}')

@@ -12,8 +12,10 @@ class UnistatError(Exception):
 
 class SeriesNameCollisionError(UnistatError, ValueError):
     """
-    Raised when two pandas Series share the same name where distinct names
-    are required (e.g., concatenation for modeling).
+    Raised when 2 Series share names, and no error-handling implemented.
+
+    If error-handling has been implemented to avoid crashes (e.g. Series are
+    renamed to deconflict) use SeriesNameCollisionWarning instead.
 
     Args:
     name: str
@@ -69,12 +71,23 @@ class ExperimentalWarning(UnistatWarning):
         )
 
         default = f'''
-            {self.feature} is still experimental, and may contain errors or
-            fail to function as expected. In critical applications, output
-            should be carefully checked, or an alternative used.
+        {self.feature} is still experimental, and may contain errors or
+        fail to function as expected. In critical applications, output
+        should be carefully checked, or an alternative used.
         '''
         super().__init__(message or default)
         self.custom_message = message  # None if default was used
+
+
+class SeriesNameCollisionWarning(UnistatWarning):
+    """Emitted when 2 Series share names, but error-handling implemented.
+
+    If no error-handling exists, use SeriesNameCollisionError instead..
+    """
+    def __init__(self, message: str | None = None) -> None:
+        default = 'Series shared same names; names were deconflicted.'
+        msg = message or default
+        super().__init__(msg)
 
 
 # Convenience methods ==========================================================

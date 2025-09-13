@@ -1,8 +1,8 @@
-import warnings
 from collections import namedtuple
 import numpy as np
 import pandas as pd
 from scipy import stats
+from .exceptions import SeriesNameCollisionError, SeriesNameCollisionWarning
 
 
 class CorrStats:
@@ -56,7 +56,8 @@ class TwoSeriesStats:
                  parametric: bool = True,
                  alpha_level: float = .05):
         if test.name == control.name:
-            warnings.warn('`test` and `control` have the same column name.')
+            SeriesNameCollisionWarning('`test` and `control` have '
+                                       'the same column name.')
             test = test.rename(f'{test.name}_TEST')
             control = control.rename(f'{test.name}_CTRL')
         self.test = test.dropna().reset_index(drop=True)
@@ -215,7 +216,8 @@ class TwoSampleStats(TwoSeriesStats):
         bool_x = bool_x.rename(bool_x.name or 'x')
         num_y = num_y.rename(num_y.name or 'y')
         if bool_x.name == num_y.name:
-            raise ValueError('Both bool_x and num_y cannot have same names.')
+            raise SeriesNameCollisionError('Both bool_x and num_y '
+                                           'cannot have same names.')
 
         # Concat into a df in order to .dropna, then define x & y series
         self._df = (
