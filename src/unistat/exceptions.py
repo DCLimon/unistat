@@ -1,4 +1,4 @@
-
+"""Module for all custom exceptions & warnings."""
 import warnings
 
 
@@ -11,8 +11,7 @@ class UnistatError(Exception):
 
 
 class SeriesNameCollisionError(UnistatError, ValueError):
-    """
-    Raised when 2 Series share names, and no error-handling implemented.
+    """Raised when 2 Series share names, and no error-handling implemented.
 
     If error-handling has been implemented to avoid crashes (e.g. Series are
     renamed to deconflict) use SeriesNameCollisionWarning instead.
@@ -95,8 +94,7 @@ class SeriesNameCollisionWarning(UnistatWarning):
 def warn_experimental(feature: str | type,
                       message: str | None = None, *,
                       stacklevel: int = 2) -> None:
-    """
-    Convenience helper to emit an ExperimentalWarning with a correct stacklevel.
+    """Convenience helper to emit an ExperimentalWarning with a correct stacklevel.
 
     Example
     -------

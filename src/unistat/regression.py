@@ -1,4 +1,35 @@
+"""Module for regression statistics.
 
+This module provides an abstract base class and concrete implementations for
+performing regression analyses using statsmodels. It supports linear regression,
+logistic regression, and log-binomial regression, with features like variance
+inflation factor (VIF) calculation, standardized regressions, odds/risk ratios,
+and formatted output.
+
+Dependencies
+------------
+* abc: For abstract base classes.
+* numpy: For numerical operations.
+* pandas: For data manipulation.
+* scipy: For statistical functions (z-score).
+* statsmodels: For regression models and VIF.
+
+Classes
+-------
+RegressionStats
+    Abstract base class for regression statistics.
+LogitStats
+    Class for logistic regression statistics.
+LinRegStats
+    Class for linear regression statistics.
+LogBinStats
+    Experimental class for log-binomial regression statistics.
+
+Notes
+-----
+Assumes input data are pandas Series/DataFrames. Handles boolean columns
+specially in standardization.
+"""
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
@@ -9,6 +40,37 @@ from .exceptions import warn_experimental
 
 
 class RegressionStats(ABC):
+    """Abstract base class for regression statistics.
+
+    Provides common functionality for regression models, including data
+    preparation, standardization, VIF calculation, and properties for
+    regression results.
+
+    Parameters
+    ----------
+    X : pd.DataFrame or pd.Series
+        Independent variables (features).
+    y : pd.Series
+        Dependent variable (target).
+    bool_col_names : list[str] or str or None, optional
+        Names of boolean columns in X to exclude from standardization.
+
+    Attributes
+    ----------
+    bool_cols : list[str] or None
+        List of boolean column names.
+    X : pd.DataFrame
+        Processed features as float64.
+    y : pd.DataFrame
+        Processed target as float64.
+    reg : statsmodels regression result
+        Fitted regression model.
+    std_reg : statsmodels regression result
+        Fitted standardized regression model.
+    _df : pd.DataFrame
+        Concatenated DataFrame of X and y with NaNs dropped.
+    """
+
     def __init__(self, X, y, bool_col_names: list | str | None = None):
         self._df = self._concat_xy(X, y)
         self.bool_cols = bool_col_names
@@ -26,6 +88,14 @@ class RegressionStats(ABC):
         self.std_reg = None
 
     def __str__(self):
+        """
+        String representation of the regression results.
+
+        Returns
+        -------
+        str
+            Formatted string with VIF (if applicable) and regression summaries.
+        """
         if len(self.X.columns) >= 2:
             print_string = (f'{str(self.vif_matrix())}\n'
                             f'{self.reg.summary2().as_text()}\n')
@@ -39,6 +109,13 @@ class RegressionStats(ABC):
 
     @property
     def _all_bool_cols(self):
+        """Check if all columns in X are boolean.
+
+        Returns
+        -------
+        bool
+            True if all columns are boolean, False otherwise.
+        """
         if self.bool_cols is None:
             return False
         else:
@@ -46,6 +123,13 @@ class RegressionStats(ABC):
 
     @property
     def bool_cols(self):
+        """Get the list of boolean column names.
+
+        Returns
+        -------
+        list[str] or None
+            List of boolean columns.
+        """
         return self._bool_cols
 
     @bool_cols.setter
@@ -61,6 +145,13 @@ class RegressionStats(ABC):
 
     @property
     def X_std(self):
+        """Standardized version of X (z-scores), excluding boolean columns.
+
+        Returns
+        -------
+        pd.DataFrame
+            Standardized features.
+        """
         # Create a standardized version of feature column (z-score)
         if self.bool_cols is not None:
             X_num = self.X[[col for col in self.X.columns
@@ -83,6 +174,18 @@ class RegressionStats(ABC):
 
     @abstractmethod
     def _run_regression(self, standardize: bool = False):
+        """Abstract method to run the regression model.
+
+        Parameters
+        ----------
+        standardize : bool, optional
+            Whether to use standardized features. Defaults to False.
+
+        Returns
+        -------
+        statsmodels regression result
+            Fitted model.
+        """
         if not standardize:
             exog = self.X
         else:
@@ -99,6 +202,13 @@ class RegressionStats(ABC):
 
     @property
     def reg(self):
+        """Get the fitted regression model.
+
+        Returns
+        -------
+        statsmodels regression result
+            Fitted model.
+        """
         return self._reg
 
     @reg.setter
@@ -110,6 +220,13 @@ class RegressionStats(ABC):
 
     @property
     def std_reg(self):
+        """Get the fitted standardized regression model.
+
+        Returns
+        -------
+        statsmodels regression result
+            Fitted standardized model.
+        """
         return self._std_reg
 
     @std_reg.setter
@@ -120,6 +237,18 @@ class RegressionStats(ABC):
             self._std_reg = result
 
     def vif_matrix(self):
+        """Calculate variance inflation factors (VIF) for feature DataFrame.
+
+        Returns
+        -------
+        pd.Series
+            VIF values for each feature.
+
+        Raises
+        ------
+        ValueError
+            If fewer than 2 columns in X.
+        """
         if len(self.X.columns) < 2:
             raise ValueError('VIF requires at least 2 columns')
         X = self.X.dropna().astype(float)
@@ -135,6 +264,20 @@ class RegressionStats(ABC):
 
     @staticmethod
     def _concat_xy(X, y):
+        """Concatenate X and y, handle data types, drop NaNs.
+
+        Parameters
+        ----------
+        X : pd.DataFrame or pd.Series
+            Features.
+        y : pd.Series
+            Target.
+
+        Returns
+        -------
+        pd.DataFrame
+            Processed DataFrame.
+        """
         df = pd.concat([X, y], axis='columns').dropna(axis='index')
         for col in df.columns:
             if df[col].dtype == pd.BooleanDtype():
@@ -147,10 +290,30 @@ class RegressionStats(ABC):
 
 
 class LogitStats(RegressionStats):
+    """Class for logistic regression statistics.
+
+    Extends RegressionStats for logistic regression using Logit model.
+
+    Parameters
+    ----------
+    X : pd.DataFrame or pd.Series
+        Predictor observations.
+    y : pd.Series
+        Binary outcome observations.
+    bool_col_names : list[str] or str or None, optional
+        String names of Boolean columns to exclude from standardization.
+    """
     def __init__(self, X, y, bool_col_names: list | str | None = None):
         super().__init__(X, y, bool_col_names)
 
     def __str__(self):
+        """String representation with VIF, summary, and odds ratios.
+
+        Returns
+        -------
+        str
+            Formatted results.
+        """
         if len(self.X.columns) >= 2:
             print_string = (
                 f'{str(self.vif_matrix())}\n'
@@ -172,6 +335,18 @@ class LogitStats(RegressionStats):
         return print_string
 
     def _run_regression(self, standardize: bool = False):
+        """Fit logistic regression.
+
+        Parameters
+        ----------
+        standardize : bool, optional
+            Use standardized features. Defaults to False.
+
+        Returns
+        -------
+        statsmodels.discrete.discrete_model.LogitResults
+            Fitted model.
+        """
         if not standardize:
             exog = self.X
         else:
@@ -190,6 +365,23 @@ class LogitStats(RegressionStats):
         return logit
 
     def logit_or(self, standardize: bool = False) -> pd.DataFrame:
+        """Calculate odds ratios by predictor, with 95% confidence intervals.
+
+        Parameters
+        ----------
+        standardize : bool, optional
+            Use standardized model. Defaults to False.
+
+        Returns
+        -------
+        pd.DataFrame
+            Odds ratios with 95% CI.
+
+        Raises
+        ------
+        ValueError
+            If all columns are boolean and standardize is True.
+        """
         if standardize:
             if not self._all_bool_cols:
                 model = self.std_reg
@@ -206,6 +398,20 @@ class LogitStats(RegressionStats):
     def pretty_print_or(self,
                         standardize: bool = False,
                         label: bool = True) -> None:
+        """Print formatted ORs & 95% CIs for easy copy-pasting.
+
+        Parameters
+        ----------
+        standardize : bool, optional
+            Use standardized model. Defaults to False.
+        label : bool, optional
+            Include parameter labels. Defaults to True.
+
+        Raises
+        ------
+        ValueError
+            If all columns are boolean and standardize is True.
+        """
         if standardize:
             if self._all_bool_cols:
                 raise ValueError('Standardized logit cannot be run when all '
@@ -229,10 +435,36 @@ class LogitStats(RegressionStats):
 
 
 class LinRegStats(RegressionStats):
+    """Class for linear regression statistics.
+
+    Extends RegressionStats for ordinary least squares (OLS) regression.
+
+    Parameters
+    ----------
+    X : pd.DataFrame or pd.Series
+        Predictor observations.
+    y : pd.Series
+        Numeric outcome observations.
+    bool_col_names : list[str] or str or None, optional
+        Boolean columns to exclude from standardization.
+    """
+
     def __init__(self, X, y, bool_col_names: list | str | None = None):
         super().__init__(X, y, bool_col_names)
 
     def _run_regression(self, standardize: bool = False):
+        """Run OLS linear regression.
+
+        Parameters
+        ----------
+        standardize : bool, optional
+            Use standardized features. Defaults to False.
+
+        Returns
+        -------
+        statsmodels.regression.linear_model.RegressionResults
+            Fitted model.
+        """
         if not standardize:
             exog = self.X
         else:
@@ -253,6 +485,21 @@ class LinRegStats(RegressionStats):
     def pretty_print_coefs(self,
                            standardize: bool = False,
                            label: bool = True) -> None:
+        """
+        Print formatted regression coefficients for easy copy-pasting.
+
+        Parameters
+        ----------
+        standardize : bool, optional
+            Use standardized model. Defaults to False.
+        label : bool, optional
+            Include parameter labels. Defaults to True.
+
+        Raises
+        ------
+        ValueError
+            If all columns are boolean and standardize is True.
+        """
         # Use standardized regression results as necessary
         if standardize:
             if self._all_bool_cols:
@@ -286,6 +533,25 @@ class LinRegStats(RegressionStats):
 
 
 class LogBinStats(RegressionStats):
+    """Class for log-binomial regression statistics (experimental).
+
+    Extends RegressionStats for generalized linear model with binomial family
+    and log link.
+
+    Parameters
+    ----------
+    X : pd.DataFrame or pd.Series
+        Independent variables.
+    y : pd.Series
+        Dependent variable (binary).
+    bool_col_names : list[str] or str or None, optional
+        Boolean columns to exclude from standardization.
+
+    Warnings
+    --------
+    This class is experimental; use with caution and verify results.
+    """
+
     def __init__(self, X, y, bool_col_names: list | str | None = None):
         warn_experimental('''
             This feature is experimental and has not been fully tested nor 
@@ -296,6 +562,13 @@ class LogBinStats(RegressionStats):
         super().__init__(X, y, bool_col_names)
 
     def __str__(self):
+        """String representation with VIF, summary, and risk ratios.
+
+        Returns
+        -------
+        str
+            Formatted results.
+        """
         if len(self.X.columns) >= 2:
             print_string = (
                 f'{str(self.vif_matrix())}\n'
@@ -317,6 +590,18 @@ class LogBinStats(RegressionStats):
         return print_string
 
     def _run_regression(self, standardize: bool = False):
+        """Run log-binomial regression.
+
+        Parameters
+        ----------
+        standardize : bool, optional
+            Use standardized features. Defaults to False.
+
+        Returns
+        -------
+        statsmodels.genmod.generalized_linear_model.GLMResults
+            Fitted model.
+        """
         if not standardize:
             exog = self.X
         else:
@@ -343,6 +628,23 @@ class LogBinStats(RegressionStats):
         return logbin
 
     def logbin_rr(self, standardize: bool = False) -> pd.DataFrame:
+        """Calculate risk ratios by predictor with 95% confidence intervals.
+
+        Parameters
+        ----------
+        standardize : bool, optional
+            Use standardized model. Defaults to False.
+
+        Returns
+        -------
+        pd.DataFrame
+            Risk ratios with 95% CI.
+
+        Raises
+        ------
+        ValueError
+            If all columns are boolean and standardize is True.
+        """
         if standardize:
             if not self._all_bool_cols:
                 model = self.std_reg
@@ -359,6 +661,20 @@ class LogBinStats(RegressionStats):
     def pretty_print_rr(self,
                         standardize: bool = False,
                         label: bool = True) -> None:
+        """Print formatted risk ratios w/ 95% CIs for easy copy-pasting.
+
+        Parameters
+        ----------
+        standardize : bool, optional
+            Use standardized model. Defaults to False.
+        label : bool, optional
+            Include parameter labels. Defaults to True.
+
+        Raises
+        ------
+        ValueError
+            If all columns are boolean and standardize is True.
+        """
         if standardize:
             if self._all_bool_cols:
                 raise ValueError('Standardized logit cannot be run when all '
@@ -372,7 +688,7 @@ class LogBinStats(RegressionStats):
             row = ratios.loc[idx, :]
 
             print_string = (
-                f'OR {row['OR']:.2f} '
+                f'OR {row['RR']:.2f} '
                 f'({row['95% CI lower']:.2f} - {row['95% CI upper']:.2f})'
             )
             if label:

@@ -1,4 +1,55 @@
+"""Module for resampling statistics, including bootstrapping and permutations.
 
+This module provides classes for bootstrapping and permutation tests on two
+series or samples. It supports tests on means and medians for bootstrapping,
+and additional t-tests and Mann-Whitney U for permutations. Results include
+observed statistics, distributions, confidence intervals, and p-values.
+
+Dependencies
+------------
+* typing: For type hints.
+* collections.abc: For abstract base classes.
+* dataclasses: For dataclass definitions.
+* warnings: For issuing warnings.
+* numpy: For numerical operations and arrays.
+* pandas: For data manipulation.
+* scipy: For statistical functions (bootstrap, permutation_test, ttest_ind, mannwhitneyu).
+* ._types: For custom type VectorLike.
+* .exceptions: For custom exceptions and warnings.
+
+Classes
+-------
+BootResult
+    Dataclass for bootstrap results.
+PermResult
+    Dataclass for permutation results.
+TwoSeriesBootstrap
+    Class for bootstrapping two series.
+TwoSampleBootstrap
+    Class for bootstrapping with a boolean grouping variable.
+TwoSeriesPermutation
+    Class for permutation tests on two series.
+TwoSamplePermutation
+    Class for permutation tests with a boolean grouping variable.
+
+Warnings
+--------
+
+Note that while bootstrapped hypothesis tests are possible, they are much more
+complicated to perform than permutation hypothesis tests. Bootstrapped
+hypothesis tests and p-values are a WIP. While bootstrapped CIs are reliable
+and preferred, currently (and probably generally), permutation tests should be
+preferred for hypothesis tests. To avoid accidentally using an unreliable or
+biased bootstrapped p-value in actual practice, displaying of bootstrapped
+p-values is currently controlled by the ``boot_p_value`` Boolean parameter,
+which currently defaults to ``False``; setting it to ``True`` will allow access
+to the WIP bootstrapped p-value.
+
+Notes
+-----
+Assumes input series are continuous. Handles missing data by dropping NaNs.
+Some features, like bootstrap p-values, are experimental.
+"""
 # Standard
 from typing import Optional, Literal
 from collections.abc import Callable
@@ -23,6 +74,29 @@ type _BootstrapTestTypes = Literal['means', 'medians']
 
 @dataclass
 class BootResult:
+    """
+    Dataclass to store bootstrap resampling results.
+
+    Attributes
+    ----------
+    obs_stat : float or int
+        Observed test statistic (difference of means or medians).
+    boot_mean : float or int
+        Mean of the bootstrap distribution.
+    boot_sem : float or int
+        Standard error of the mean from the bootstrap distribution.
+    boot_ci_lo : float or int
+        Lower bound of the bias-corrected accelerated (BCa) confidence interval.
+    boot_ci_hi : float or int
+        Upper bound of the BCa confidence interval.
+    p : float
+        P-value from bootstrap hypothesis test (experimental).
+    boot_ci_pct : float
+        Confidence level percentage for the CI.
+    boot_dist : np.ndarray
+        Bootstrap distribution array.
+    """
+
     obs_stat: float | int
     boot_mean: float | int
     boot_sem: float | int
@@ -33,6 +107,14 @@ class BootResult:
     boot_dist: np.ndarray
 
     def __str__(self):
+        """String representation of bootstrap results.
+
+        Returns
+        -------
+        str
+            Formatted string with observed statistic, bootstrap mean, SEM, CI,
+            and p-value.
+        """
         return f'''
         Observed Test Stat: {self.obs_stat:.4f}
         Mean of Bootstrap Dist.: {self.boot_mean:.4f}
@@ -43,6 +125,157 @@ class BootResult:
 
 
 class TwoSeriesBootstrap:
+    """Class for bootstrapping CI & hypothesis tests on two continuous series.
+
+    Supports difference of means or medians. Provides bootstrap distribution,
+    CIs, and optional experimental p-value from a bootstrapped hypothesis test.
+
+    Currently, by default, no hypothesis tests are performed nor p-values given.
+
+    Parameters
+    ----------
+    test : pd.Series
+        Test group data.
+    control : pd.Series
+        Control group data.
+    test_type : {'means', 'medians'}, optional
+        Type of test statistic. Defaults to 'means'.
+    alpha_level : float, optional
+        Significance level for CI. Defaults to 0.05.
+    n_resamples : int, optional
+        Number of bootstrap resamples. Defaults to 10,000.
+    rng : int, optional
+        Random seed for reproducibility. Defaults to 519.
+    boot_p_value : bool, optional
+        If True, compute experimental bootstrap p-value. Defaults to False.
+
+    Attributes
+    ----------
+    test : pd.Series
+        Cleaned test data.
+    control : pd.Series
+        Cleaned control data.
+    alpha : float
+        Significance level.
+    n_resamples : int
+        Number of resamples.
+    rng : int
+        Random seed.
+    boot_result : BootResult or None
+        Stored bootstrap results.
+
+    Raises
+    ------
+    ValueError
+        If test_type is invalid.
+
+    Notes
+    -----
+    Regarding the current WIP bootstrap hypothesis test, p-values are not
+    currently displayed by default, as controlled by the ``boot_p_value``
+    Boolean parameter.
+
+    Under Frequentist statistical philosophy, a p-value represents the
+    probability of getting results as-or-more-extreme than those observed, if
+    the null hypothesis is true (this is even the assumption for classical
+    calculated asymptotic hypothesis tests). In the context of bootstrap
+    statistics, this would mean that a bootstrap distribution should represent
+    the distribution of test statistics (mean, median, t-stat, U-stat) that
+    would be observed *under the null hypothesis (H0)*, and the p-value would be
+    the fraction of test statistic values in that bootstrapped distribution
+    which are at least as extreme as what was actually observed.
+
+    In contrast, when creating a bootstrap distribution to estimate CI or SEM
+    (the primary use of bootstrapping), one creates a bootstrap distribution
+    *under the assumption that the* **alternative hypothesis (Ha)** *is true*.
+    Looking at how these bootstrap classes display results, this is apparent:
+    we display bootstrapped means/CIs for the test statistic (difference in
+    group means/medians) between test and control groups. Another way of
+    phrasing a statistically significant difference in means (at the
+    :math:`\alpha = .05` significance level), for example, would be to say that
+    the 95% CI of difference in the means of the test and control samples does
+    NOT include zero. Since the null hypothesis (at least
+    in cases relevant to typical biostats) is that the means or medians are
+    *equal* in the test and control groups (or that the difference in the means/
+    medians is zero), the fact that the bootstrapped difference in means is not
+    zero here shows that these bootstrap distributions for CI are NOT bootstraps
+    under the null hypothesis. Indeed, when first making this module, that
+    mistake was made, and it was found that even when there was an obvious
+    difference between test vs. control groups, bootstrapped "p-values" taken
+    from the same distribution as bootstrapped CIs returns a p-value near 0.50;
+    to put it another way, this mistaken approach found that the observed
+    difference in means was typically almost exactly the same as the average
+    bootstrapped difference in means -- exactly what would be expected in a
+    distribution representing the alternative hypothesis.
+
+    While checking for overlapping CIs does indicate statistical significance in
+    a Boolean fashion, it cannot give p-values. Instead, to calculate p-values
+    via a bootstrapped methodology, in addition to the bootstrapped distribution
+    under the Ha (used to estimate CIs), one must also use some method to
+    bootstrap the null distribution in order to calculate p-value. Boos &
+    Stefanski (2013) [1]_ suggest 2 methods, as summarized in this
+    `lecture by Alex Kaizer <https://www.alexkaizer.com/bios_6618/files/bios6618/W16/bootstrap_pvalue.pdf>`_:
+
+    1. Combine all test and control observations (e.g. Hgb value for both blunt
+    & penetrating trauma patients), then sample with replacement for the N in
+    both test and control groups (number of blunt/penetrating patients) to
+    create bootstrapped test and control samples.
+
+        * On average, this approach will create equal means in each group
+        * However, the intermingling of observations in each group means that if
+          observed groups do not have equal variance, they will end up with
+          equal variances during resampling
+            * This is the same issue encountered in Welch vs. Student t-tests
+            * This risks inflating Type I error rate if variances are unequal
+
+    2. Create separate *observed* distributions for test & control, where each
+    value represents how much the original value differed from its group mean.
+    Each groups' bootstrap sample is sampled with replacement from its own
+    group's mean-shifted sample.
+
+        * Both test and control groups now have identical group means of 0
+          (since the mean variation from the mean in a sample is 0, duh)
+        * This also preserves unequal variances
+        * This seems like a superior strategy, and will ultimately be
+          implemented for this module
+        * This method does require performing completely separate bootstrap
+          samples for both test & control groups, if and only if the goal is
+          to perform a hypothesis test and derive a p-value
+
+    Due to coding challenges, a hybrid approach has been taken in the interim
+    here, which will later be changed.
+
+    * We take the bootstrap-under-Ha distribution (as used for CIs), and then
+      shift it to be centered about the mean of the bootstrap distrubtion.
+    * From this, we find how many bootstrap samples had a mean at least as
+      extreme as what was observed. This is the p-value.
+    * Since the bootstrap samples still allow admixture of test & control
+      observations, this method is accurate, but still destroys any unequal
+      variances between test & control groups
+        * For this reason, this approach is not robust for deployment
+
+    In contrast to bootstrapping, permutation tests (sampling without
+    replacement, and then randomly assigning to test or control) generates
+    a distribution under the null hypothesis. For this reason, permutation
+    methods more easily generate a p-value, but are not (easily) fit to
+    generating a CI for the test statistic, in the way bootstrapping is. While
+    the acceptability of using both methods (i.e. bootstrap a CI and then
+    permute a p-value), it doesn't immediately seem like an objectionable choice
+    if both values are truly needed. This would probably be preferred even once
+    bootstrapped hypothesis tests are fully implemented, since even that would
+    require an entire separate resampling run. The only time when bootstrapped
+    hypothesis tests are truly necessary is when the permutation test assumption
+    (that test & control groups are exchangeable; that is, they have the same
+    distributions if H0 is true) is violated. The proposed bootstrapped
+    hypothesis testing method (#2 above) does not make this assumption.
+
+    References
+    ----------
+    ..  [1] Chapter 11.6. Bootstrap Resampling for Hypothesis Tests. In:
+        Essential Statistical Inference: Theory and Methods. Springer texts in
+        statistics. New York: Springer; 2013.
+    """
+
     _use_parametric_summ_stats = {'means': True, 'medians': False}
 
     def __init__(self,
@@ -201,6 +434,23 @@ class TwoSeriesBootstrap:
         return summ_stats
 
     def bootstrap(self, n_resamples: int = None):
+        """Perform bootstrap resampling.
+
+        Parameters
+        ----------
+        n_resamples : int, optional
+            Number of resamples. Defaults to self.n_resamples.
+
+        Returns
+        -------
+        BootResult
+            Bootstrap results.
+
+        Notes
+        -----
+        Uses BCa method for confidence intervals. P-value is experimental.
+        Updates hypothesis direction in summary stats if p < alpha.
+        """
         # Default to using self.n_resamples
         n_resamples = n_resamples or self.n_resamples
 
@@ -281,6 +531,22 @@ class TwoSeriesBootstrap:
         sample_b: VectorLike,
         axis: Literal[0, 1, 'rows', 'columns'] = 0
     ) -> float | np.float64:
+        """Compute difference of means.
+
+        Parameters
+        ----------
+        sample_a : VectorLike
+            First sample.
+        sample_b : VectorLike
+            Second sample.
+        axis : {0, 1, 'rows', 'columns'}, optional
+            Axis to compute along. Defaults to 0.
+
+        Returns
+        -------
+        float or np.float64
+            Difference of means.
+        """
         axis = {'rows': 0, 'columns': 1}.get(axis, axis)
 
         # Convert inputs once (this fixes the 'unused variable' issue)
@@ -296,6 +562,22 @@ class TwoSeriesBootstrap:
         sample_b: VectorLike,
         axis: Literal[0, 1, 'rows', 'columns'] = 0
     ) -> float | np.float64:
+        """Compute difference of medians.
+
+        Parameters
+        ----------
+        sample_a : VectorLike
+            First sample.
+        sample_b : VectorLike
+            Second sample.
+        axis : {0, 1, 'rows', 'columns'}, optional
+            Axis to compute along. Defaults to 0.
+
+        Returns
+        -------
+        float or np.float64
+            Difference of medians.
+        """
         axis = {'rows': 0, 'columns': 1}.get(axis, axis)
 
         # Convert inputs once (this fixes the 'unused variable' issue)
@@ -307,6 +589,152 @@ class TwoSeriesBootstrap:
 
 
 class TwoSampleBootstrap(TwoSeriesBootstrap):
+    """Class for bootstrapping with a boolean grouping variable.
+
+    Extends TwoSeriesBootstrap to split a continuous series by a boolean group.
+
+    Parameters
+    ----------
+    bool_x : pd.Series
+        Boolean grouping variable.
+    num_y : pd.Series
+        Continuous outcome variable.
+    test_type : {'means', 'medians'}, optional
+        Test statistic type. Defaults to 'means'.
+    alpha_level : float, optional
+        Significance level. Defaults to 0.05.
+    n_resamples : int, optional
+        Number of resamples. Defaults to 10,000.
+    rng : int, optional
+        Random seed. Defaults to 519.
+    x_test_lvl : bool, optional
+        Boolean level for test group. Defaults to True.
+    boot_p_value : bool, optional
+        Compute experimental p-value. Defaults to False.
+
+    Attributes
+    ----------
+    _df : pd.DataFrame
+        Concatenated DataFrame with NaNs dropped.
+    x : pd.Series
+        Grouping variable.
+    y : pd.Series
+        Outcome variable.
+    _test_x : bool
+        Test group level.
+
+    Raises
+    ------
+    ValueError
+        If group names collide or groups are empty after splitting.
+
+    Notes
+    -----
+    Regarding the current WIP bootstrap hypothesis test, p-values are not
+    currently displayed by default, as controlled by the ``boot_p_value``
+    Boolean parameter.
+
+    Under Frequentist statistical philosophy, a p-value represents the
+    probability of getting results as-or-more-extreme than those observed, if
+    the null hypothesis is true (this is even the assumption for classical
+    calculated asymptotic hypothesis tests). In the context of bootstrap
+    statistics, this would mean that a bootstrap distribution should represent
+    the distribution of test statistics (mean, median, t-stat, U-stat) that
+    would be observed *under the null hypothesis (H0)*, and the p-value would be
+    the fraction of test statistic values in that bootstrapped distribution
+    which are at least as extreme as what was actually observed.
+
+    In contrast, when creating a bootstrap distribution to estimate CI or SEM
+    (the primary use of bootstrapping), one creates a bootstrap distribution
+    *under the assumption that the* **alternative hypothesis (Ha)** *is true*.
+    Looking at how these bootstrap classes display results, this is apparent:
+    we display bootstrapped means/CIs for the test statistic (difference in
+    group means/medians) between test and control groups. Another way of
+    phrasing a statistically significant difference in means (at the
+    :math:`\alpha = .05` significance level), for example, would be to say that
+    the 95% CI of difference in the means of the test and control samples does
+    NOT include zero. Since the null hypothesis (at least
+    in cases relevant to typical biostats) is that the means or medians are
+    *equal* in the test and control groups (or that the difference in the means/
+    medians is zero), the fact that the bootstrapped difference in means is not
+    zero here shows that these bootstrap distributions for CI are NOT bootstraps
+    under the null hypothesis. Indeed, when first making this module, that
+    mistake was made, and it was found that even when there was an obvious
+    difference between test vs. control groups, bootstrapped "p-values" taken
+    from the same distribution as bootstrapped CIs returns a p-value near 0.50;
+    to put it another way, this mistaken approach found that the observed
+    difference in means was typically almost exactly the same as the average
+    bootstrapped difference in means -- exactly what would be expected in a
+    distribution representing the alternative hypothesis.
+
+    While checking for overlapping CIs does indicate statistical significance in
+    a Boolean fashion, it cannot give p-values. Instead, to calculate p-values
+    via a bootstrapped methodology, in addition to the bootstrapped distribution
+    under the Ha (used to estimate CIs), one must also use some method to
+    bootstrap the null distribution in order to calculate p-value. Boos &
+    Stefanski (2013) [1]_ suggest 2 methods, as summarized in this
+    `lecture by Alex Kaizer <https://www.alexkaizer.com/bios_6618/files/bios6618/W16/bootstrap_pvalue.pdf>`_:
+
+    1. Combine all test and control observations (e.g. Hgb value for both blunt
+    & penetrating trauma patients), then sample with replacement for the N in
+    both test and control groups (number of blunt/penetrating patients) to
+    create bootstrapped test and control samples.
+
+        * On average, this approach will create equal means in each group
+        * However, the intermingling of observations in each group means that if
+          observed groups do not have equal variance, they will end up with
+          equal variances during resampling
+            * This is the same issue encountered in Welch vs. Student t-tests
+            * This risks inflating Type I error rate if variances are unequal
+
+    2. Create separate *observed* distributions for test & control, where each
+    value represents how much the original value differed from its group mean.
+    Each groups' bootstrap sample is sampled with replacement from its own
+    group's mean-shifted sample.
+
+        * Both test and control groups now have identical group means of 0
+          (since the mean variation from the mean in a sample is 0, duh)
+        * This also preserves unequal variances
+        * This seems like a superior strategy, and will ultimately be
+          implemented for this module
+        * This method does require performing completely separate bootstrap
+          samples for both test & control groups, if and only if the goal is
+          to perform a hypothesis test and derive a p-value
+
+    Due to coding challenges, a hybrid approach has been taken in the interim
+    here, which will later be changed.
+
+    * We take the bootstrap-under-Ha distribution (as used for CIs), and then
+      shift it to be centered about the mean of the bootstrap distrubtion.
+    * From this, we find how many bootstrap samples had a mean at least as
+      extreme as what was observed. This is the p-value.
+    * Since the bootstrap samples still allow admixture of test & control
+      observations, this method is accurate, but still destroys any unequal
+      variances between test & control groups
+        * For this reason, this approach is not robust for deployment
+
+    In contrast to bootstrapping, permutation tests (sampling without
+    replacement, and then randomly assigning to test or control) generates
+    a distribution under the null hypothesis. For this reason, permutation
+    methods more easily generate a p-value, but are not (easily) fit to
+    generating a CI for the test statistic, in the way bootstrapping is. While
+    the acceptability of using both methods (i.e. bootstrap a CI and then
+    permute a p-value), it doesn't immediately seem like an objectionable choice
+    if both values are truly needed. This would probably be preferred even once
+    bootstrapped hypothesis tests are fully implemented, since even that would
+    require an entire separate resampling run. The only time when bootstrapped
+    hypothesis tests are truly necessary is when the permutation test assumption
+    (that test & control groups are exchangeable; that is, they have the same
+    distributions if H0 is true) is violated. The proposed bootstrapped
+    hypothesis testing method (#2 above) does not make this assumption.
+
+    References
+    ----------
+    ..  [1] Chapter 11.6. Bootstrap Resampling for Hypothesis Tests. In:
+        Essential Statistical Inference: Theory and Methods. Springer texts in
+        statistics. New York: Springer; 2013.
+    """
+
     def __init__(self,
                  bool_x: pd.Series, num_y: pd.Series,
                  test_type: _BootstrapTestTypes = 'means',
@@ -363,6 +791,13 @@ class TwoSampleBootstrap(TwoSeriesBootstrap):
                          boot_p_value=boot_p_value)
 
     def __str__(self):
+        """String representation of bootstrap results with outcome name.
+
+        Returns
+        -------
+        str
+            Formatted outcome, summary stats, and bootstrap results.
+        """
         # Ensure bootstrapping has been run before printing
         if self.boot_result is None:
             self.bootstrap()
@@ -389,11 +824,31 @@ type _PermutationTestTypes = Literal['means', 'medians', 't_welch', 'mwu']
 
 @dataclass
 class PermResult:
+    """Dataclass to store permutation test results.
+
+    Attributes
+    ----------
+    obs_stat : float or int
+        Observed test statistic.
+    perm_dist : np.ndarray
+        Permutation null distribution.
+    p : float
+        P-value from permutation test.
+    """
+
     obs_stat: float | int
     p: float
     perm_dist: np.ndarray
 
     def __str__(self):
+        """String representation of permutation results.
+
+        Returns
+        -------
+        str
+            Formatted observed statistic, mean/SEM of permutation distribution,
+            and p-value.
+        """
         return f'''
         Observed Test Stat: {self.obs_stat:.4f}
         P = {self.p:.5f}
@@ -401,6 +856,48 @@ class PermResult:
 
 
 class TwoSeriesPermutation:
+    """Class for permutation hypothesis tests on two continuous series.
+
+    Supports difference of means/medians, Welch's t, or Mann-Whitney U.
+
+    Parameters
+    ----------
+    test : pd.Series
+        Test group data.
+    control : pd.Series
+        Control group data.
+    test_type : {'means', 'medians', 't_welch', 'mwu'}, optional
+        Test statistic type. Defaults to 'means'.
+    alpha_level : float, optional
+        Significance level. Defaults to 0.05.
+    n_resamples : int, optional
+        Number of permutations. Defaults to 10,000.
+    rng : int, optional
+        Random seed. Defaults to 519.
+
+    Attributes
+    ----------
+    test : pd.Series
+        Cleaned test data.
+    control : pd.Series
+        Cleaned control data.
+    test_type : str
+        Selected test type.
+    alpha : float
+        Significance level.
+    n_resamples : int
+        Number of resamples.
+    rng : int
+        Random seed.
+    perm_result : PermResult or None
+        Stored permutation results.
+
+    Raises
+    ------
+    ValueError
+        If test_type is invalid.
+    """
+
     _test_display_names = {
         'means': 'Difference of means',
         'medians': 'Difference of medians',
@@ -442,6 +939,13 @@ class TwoSeriesPermutation:
 
     @property
     def summ_stats(self):
+        """Get summary statistics based on test type.
+
+        Returns
+        -------
+        pd.DataFrame
+            Parametric or nonparametric summary.
+        """
         if self.test_type in self._tests_using_parametric_summ_stats:
             return self._parametric_summ_stats()
 
@@ -451,6 +955,13 @@ class TwoSeriesPermutation:
 
     @property
     def test_stat_func(self) -> Callable:
+        """Get the test statistic function based on test_type.
+
+        Returns
+        -------
+        Callable
+            Function to compute test statistic.
+        """
         func_map = {
             'means': self.mean_diff,
             'medians': self.median_diff,
@@ -461,6 +972,13 @@ class TwoSeriesPermutation:
         return func_map[self.test_type]
 
     def _parametric_summ_stats(self):
+        """Compute parametric summary statistics.
+
+        Returns
+        -------
+        pd.DataFrame
+            Summary with n, mean, std, min, max, Ha indicator.
+        """
         summ_stats = pd.DataFrame(
             data={
                 self.test.name: {
@@ -485,6 +1003,13 @@ class TwoSeriesPermutation:
         return summ_stats
 
     def _nonparametric_summ_stats(self):
+        """Compute nonparametric summary statistics.
+
+        Returns
+        -------
+        pd.DataFrame
+            Summary with n, min, q1, median, q3, max, iqr, Ha indicator.
+        """
         q_test = self.test.quantile([0, 0.25, 0.5, 0.75, 1])
         q_control = self.control.quantile([0, 0.25, 0.5, 0.75, 1])
 
@@ -517,6 +1042,23 @@ class TwoSeriesPermutation:
         return summ_stats
 
     def permute(self, n_resamples: int = None):
+        """Perform permutation test.
+
+        Parameters
+        ----------
+        n_resamples : int, optional
+            Number of permutations. Defaults to self.n_resamples.
+
+        Returns
+        -------
+        PermResult
+            Permutation results.
+
+        Notes
+        -----
+        Uses 'independent' permutation type, and does not support paired
+        samples. Updates Ha indicator in summ_stats if p < alpha.
+        """
         # Default to using self.n_resamples
         n_resamples = n_resamples or self.n_resamples
 
@@ -561,6 +1103,22 @@ class TwoSeriesPermutation:
         sample_b: VectorLike,
         axis: Literal[0, 1, 'rows', 'columns'] = 0
     ):
+        """Compute difference of means for permutation.
+
+        Parameters
+        ----------
+        sample_a : VectorLike
+            First permuted sample.
+        sample_b : VectorLike
+            Second permuted sample.
+        axis : {0, 1, 'rows', 'columns'}, optional
+            Axis to compute. Defaults to 0.
+
+        Returns
+        -------
+        float or np.float64
+            Difference of means.
+        """
         axis = {'rows': 0, 'columns': 1}.get(axis, axis)
 
         # Convert inputs once (this fixes the 'unused variable' issue)
@@ -576,6 +1134,22 @@ class TwoSeriesPermutation:
         sample_b: VectorLike,
         axis: Literal[0, 1, 'rows', 'columns'] = 0
     ):
+        """Compute difference of medians for permutation.
+
+        Parameters
+        ----------
+        sample_a : VectorLike
+            First permuted sample.
+        sample_b : VectorLike
+            Second permuted sample.
+        axis : {0, 1, 'rows', 'columns'}, optional
+            Axis to compute. Defaults to 0.
+
+        Returns
+        -------
+        float or np.float64
+            Difference of medians.
+        """
         axis = {'rows': 0, 'columns': 1}.get(axis, axis)
 
         # Convert inputs once (this fixes the 'unused variable' issue)
@@ -663,9 +1237,12 @@ class TwoSeriesPermutation:
 
         Parameters
         ----------
-            sample_a: permuted observations assigned to test sample
-            sample_b: permuted observations assigned to control sample
-            axis: axis to compute MWU test; passed to stats.mannwhitneyu
+        sample_a : VectorLike
+            permuted observations assigned to test sample
+        sample_b : VectorLike
+            permuted observations assigned to control sample
+        axis : {0, 1, 'rows', 'columns'}, default=0
+            axis to compute MWU test; passed to stats.mannwhitneyu
 
         Returns
         -------
@@ -704,6 +1281,15 @@ class TwoSeriesPermutation:
         return test.statistic
 
     def __str__(self):
+        """String representation of permutation results.
+
+        Runs permute if not done.
+
+        Returns
+        -------
+        str
+            Formatted summary and permutation results.
+        """
         # Ensure permutation has been run before printing
         if self.perm_result is None:
             self.permute()
@@ -721,6 +1307,46 @@ class TwoSeriesPermutation:
 
 
 class TwoSamplePermutation(TwoSeriesPermutation):
+    """Class for permutation tests with a boolean grouping variable.
+
+    Extends TwoSeriesPermutation to split continuous series by boolean group.
+
+    Parameters
+    ----------
+    bool_x : pd.Series
+        Boolean grouping.
+    num_y : pd.Series
+        Continuous outcome.
+    test_type : {'means', 'medians', 't_welch', 'mwu'}, optional
+        Test type. Defaults to 'means'.
+    alpha_level : float, optional
+        Significance level. Defaults to 0.05.
+    n_resamples : int, optional
+        Permutations. Defaults to 10,000.
+    rng : int, optional
+        Seed. Defaults to 519.
+    x_test_lvl : bool, optional
+        Test level. Defaults to True.
+
+    Attributes
+    ----------
+    _df : pd.DataFrame
+        Concatenated data.
+    x : pd.Series
+        Grouping.
+    y : pd.Series
+        Outcome.
+    _test_x : bool
+        Test level.
+
+    Raises
+    ------
+    SeriesNameCollisionError
+        If names collide.
+    ValueError
+        If groups empty.
+    """
+
     def __init__(self,
                  bool_x: pd.Series, num_y: pd.Series,
                  test_type: _PermutationTestTypes = 'means',
@@ -776,6 +1402,13 @@ class TwoSamplePermutation(TwoSeriesPermutation):
                          rng=rng)
 
     def __str__(self):
+        """String representation with outcome name.
+
+        Returns
+        -------
+        str
+            Formatted outcome, summary, permutation results.
+        """
         # Ensure bootstrapping has been run before printing
         if self.perm_result is None:
             self.permute()
