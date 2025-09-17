@@ -120,7 +120,7 @@ class BootResult:
         Mean of Bootstrap Dist.: {self.boot_mean:.4f}
         SEM of Bootstrap Dist.: {self.boot_sem:.4f}
         BCa {self.boot_ci_pct:.0%} CI: {self.boot_ci_lo:.4f} to {self.boot_ci_hi:.4f}
-        P = {self.p if self.p is not None else float('nan'):.5f}
+        {f'P = {self.p:.5f}' if self.p is not None else 'No hypothesis testing performed.'}
         '''
 
 

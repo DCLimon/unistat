@@ -1,6 +1,6 @@
-"""Classes to run statistics based on contingency tables for categorical data.
+r"""Classes to run statistics based on contingency tables for categorical data.
 
-MulticlassContingencyStats runs summary stats and :math:`\chi^2` test stats fpr
+MulticlassContingencyStats runs summary stats and :math:`\chi^2` test stats for
 a contingency table with any number of IV & DV levels. BooleanContingencyStats
 inherits from MulticlassContingencyStats, and is a special case for a 2x2
 contingency table, also implementing Fisher's exact test.
@@ -12,8 +12,7 @@ from scipy import stats
 
 
 class MulticlassContingencyStats:
-    """
-    Compute contingency table stats with arbitrary number of IV & DV levels.
+    r"""Compute contingency table stats with arbitrary number of IV & DV levels.
 
     Take 2 pandas Series representing row and column variables, compute a
     contingency table, and provides methods for statistical tests like
@@ -90,8 +89,7 @@ class MulticlassContingencyStats:
 
     def table(self, as_pct: bool = False,
               axis: Literal[0, 1, 'rows', 'columns'] = 'rows') -> pd.DataFrame:
-        """
-        Compute the contingency table.
+        r"""Compute the contingency table.
 
         Parameters
         ----------
@@ -161,7 +159,7 @@ class MulticlassContingencyStats:
         return table
 
     def matrix(self):
-        """Get the contingency matrix, without marginal totals.
+        r"""Get the contingency matrix, without marginal totals.
 
         Returns
         -------
@@ -171,7 +169,7 @@ class MulticlassContingencyStats:
         return self.table().drop(index='col_totals', columns='row_totals')
 
     def chi2(self, correction: bool = False):
-        """Perform Chi-squared test of independence.
+        r"""Perform Chi-squared test of independence.
 
         Parameters
         ----------
@@ -219,7 +217,7 @@ class MulticlassContingencyStats:
         return test
 
     def print_results(self):
-        """Print contingency tables and Chi-squared results."""
+        r"""Print contingency tables and Chi-squared results."""
         # def line_length():
         #     left_title_col = max(
         #         len(self.row_title), len(self.col_title),
@@ -250,7 +248,7 @@ class MulticlassContingencyStats:
 
 
 class BooleanContingencyStats(MulticlassContingencyStats):
-    """Perform contingency statistics on boolean (2x2) tables.
+    r"""Perform contingency statistics on boolean (2x2) tables.
 
     Extends MulticlassContingencyStats with methods specific to 2x2 tables,
     such as odds ratio and Fisher's exact test.
@@ -366,7 +364,7 @@ class BooleanContingencyStats(MulticlassContingencyStats):
                          col_title, col_names)
 
     def odds_ratio(self, kind: str = 'sample'):
-        """Compute the odds ratio.
+        r"""Compute the odds ratio.
 
         Parameters
         ----------
@@ -382,7 +380,7 @@ class BooleanContingencyStats(MulticlassContingencyStats):
         return odds_ratio
 
     def fisher_exact(self, alternative='two-sided'):
-        """Perform Fisher's exact test.
+        r"""Perform Fisher's exact test.
 
         Parameters
         ----------
@@ -400,7 +398,7 @@ class BooleanContingencyStats(MulticlassContingencyStats):
         return p_val
 
     def print_results(self):
-        """Print contingency tables, odds ratio, Chi-squared, and Fisher's exact results.
+        r"""Print contingency tables, odds ratio, Chi-squared, and Fisher's exact results.
 
         Overrides the parent method to include 2x2-specific statistics.
         """
