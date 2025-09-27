@@ -1,7 +1,7 @@
 .. unistat documentation master file, created by
    sphinx-quickstart on Wed Sep 17 03:14:30 2025.
 
-unistat Documentation (Version 0.2.1)
+unistat Documentation (Version 0.2.2)
 =====================================
 
 Welcome to the documentation for ``unistat``, a Python library to simplify
@@ -36,7 +36,7 @@ this may not be easily accessible or obvious in the API, and in those cases,
 users should access and choose non-default options only with informed
 rationale for doing so.
 
-This documentation covers ``unistat`` **version 0.2.1**, released
+This documentation covers ``unistat`` **version 0.2.2**, released
 2025-09-27.
 
 Getting Started

@@ -9,7 +9,7 @@ import tomllib
 
 # Project info ---------------------------------------------------------------
 fallback_author = 'David Limon, MD'
-fallback_version = '0.2.1'
+fallback_version = '0.2.2'
 
 # Add path to src/unistat/ so Sphinx can import the package for autodoc
 sys.path.insert(0, os.path.abspath('../../src'))
