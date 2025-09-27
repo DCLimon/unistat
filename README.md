@@ -86,8 +86,8 @@ max   5.000000  =  6.000000
 
 ## Documentation
 
-Detailed usage, including API references and examples, is available at our
-[ReadTheDocs page](https://statspy.readthedocs.io/en/latest/) (placeholder).
+Detailed usage, including API references and examples, is available on
+[ReadTheDocs](https://unistat.readthedocs.io/en/latest/).
 
 ## Experimental Features
 
@@ -109,13 +109,12 @@ applications.
 ## Contributing
 
 Contributions welcome. Please submit issues or pull requests on
-[GitHub](https://github.com/username/statspy). Follow NumPy style guidelines, as
+[GitHub](https://github.com/DCLimon/unistat). Follow NumPy style guidelines, as
 also followed by SciPy and statsmodels.
 
 ## License
 
-`unistat` is licensed under the MIT License. See the [LICENSE](LICENSE) file
-for details.
+`unistat` is licensed under the BSD 3-Clause license.
 
 ## Author
 
