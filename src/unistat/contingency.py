@@ -324,6 +324,7 @@ class BooleanContingencyStats(MulticlassContingencyStats):
       Fisher's exact, and was considered the gold standard by Lydersen et al.;
       it is universally more powerful than traditional Fisher's exact & mid-p,
       and in trials did not violate target Type I error rate.
+
         * Further improved using the Berger-Boos correction, particularly for
           unbalanced designs (e.g. if survival occurs much more often than
           mortality) [4]_ [5]_
@@ -339,11 +340,11 @@ class BooleanContingencyStats(MulticlassContingencyStats):
     ..  [2] Cochran, William G. The Combination of Estimates from Different
         Experiments" Biometrics 10, no. 1 (1954): 101–29. doi: 10.2307/3001666.
 
-    .. [3] Hasselblad V, Lokhnygina Y. Tests for 2 x 2 tables in clinical
+    ..  [3] Hasselblad V, Lokhnygina Y. Tests for 2 x 2 tables in clinical
         trials. Journal of Modern Applied Statistical Methods. 2007;6:456–468.
         doi: 10.56801/10.56801/v6.i.318.
 
-    .. [4] Lydersen S, Fagerland MW, Laake P. Recommended tests for association
+    ..  [4] Lydersen S, Fagerland MW, Laake P. Recommended tests for association
         in 2 x 2 tables. Stat Med. 2009 Mar 30;28(7):1159-75.
         doi: 10.1002/sim.3531.
 

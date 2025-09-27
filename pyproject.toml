@@ -1,16 +1,16 @@
 [project]
 name = "unistat"
-version = "0.1.0"
+version = "0.2.0"
 description = "A unified statistics interface for running and displaying simple stats, using SciPy and statsmodels."
 readme = "README.md"
 authors = [
-    { name = "dclimon", email = "dclimon@gmail.com" }
+    { name = "David Limon, MD", email = "dclimon@gmail.com" }
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "numpy>=2.3.2",
+    "numpy>=2.3.3",
     "pandas>=2.3.2",
-    "scipy>=1.16.1",
+    "scipy>=1.16.2",
     "statsmodels>=0.14.5",
 ]
 
