@@ -262,24 +262,34 @@ class TwoSeriesStats:
             pct_ci = 1 - self.alpha
 
         if dist == 't':
-            dist = stats.t
-        elif dist == 'normal':
-            dist = stats.norm
-        elif dist == 'z':
-            dist = stats.norm
+            test_ci = stats.t.interval(
+                pct_ci,
+                df=self.test.count() - 1,
+                loc=self.test.mean(),
+                scale=self.test.std(ddof=1) / np.sqrt(self.test.count())
+            )
+            control_ci = stats.t.interval(
+                pct_ci,
+                df=self.control.count() - 1,
+                loc=self.control.mean(),
+                scale=self.control.std(ddof=1) / np.sqrt(self.control.count())
+            )
+
+        elif dist in ('normal', 'z'):
+            test_ci = stats.norm.interval(
+                pct_ci,
+                loc=self.test.mean(),
+                scale=self.test.std(ddof=1) / np.sqrt(self.test.count())
+            )
+            control_ci = stats.norm.interval(
+                pct_ci,
+                loc=self.control.mean(),
+                scale=self.control.std(ddof=1) / np.sqrt(self.control.count())
+            )
+
         else:
             raise ValueError("`dist` can be: {'t', 'normal', 'z'}.")
 
-        test_ci = dist.interval(
-            pct_ci,
-            loc=self.test.mean(),
-            scale=self.test.std(ddof=1) / np.sqrt(self.test.count())
-        )
-        control_ci = dist.interval(
-            pct_ci,
-            loc=self.control.mean(),
-            scale=self.control.std(ddof=1) / np.sqrt(self.control.count())
-        )
         return ControlTestStats(control=control_ci, test=test_ci)
 
     def parametric_summ_stats(self, alpha_level: float = None):

@@ -1,6 +1,6 @@
 [project]
 name = "unistat"
-version = "0.2.2"
+version = "0.2.3"
 description = "A unified statistics interface for running and displaying simple stats, using SciPy and statsmodels."
 readme = "README.md"
 authors = [

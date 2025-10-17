@@ -6,6 +6,7 @@
 .python-version
 uv.lock
 main.py
+build_checklist.md
 
 # Python cache & compiled
 __pycache__/
