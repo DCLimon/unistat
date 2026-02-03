@@ -33,6 +33,7 @@ specially in standardization.
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
+import patsy
 from scipy import stats
 import statsmodels.api as sm
 from statsmodels.stats.outliers_influence import variance_inflation_factor
@@ -60,15 +61,23 @@ class RegressionStats(ABC):
     bool_cols : list[str] or None
         List of boolean column names.
     X : pd.DataFrame
-        Processed features as float64.
+        Feature DataFrame. `NaN` values are removed and all columns are
+        converted to `float64`.
     y : pd.DataFrame
-        Processed target as float64.
+        Target DataFrame. `NaN` values are removed and all columns are converted
+        to `float64`.
     reg : statsmodels regression result
         Fitted regression model.
+    X_std : pd.DataFrame
+        `X`, with all non-Boolean columns transformed to Z-scores.
     std_reg : statsmodels regression result
         Fitted standardized regression model.
     _df : pd.DataFrame
-        Concatenated DataFrame of X and y with NaNs dropped.
+        Concatenated DataFrame of X and y.
+
+    Notes
+    -----
+    Observations with any missing data in either `X` *or* `y` are dropped.
     """
 
     def __init__(self, X, y, bool_col_names: list | str | None = None):
@@ -435,7 +444,7 @@ class LogitStats(RegressionStats):
 
 
 class LinRegStats(RegressionStats):
-    """Class for linear regression statistics.
+    r"""Class for linear regression statistics.
 
     Extends RegressionStats for ordinary least squares (OLS) regression.
 
@@ -447,6 +456,25 @@ class LinRegStats(RegressionStats):
         Numeric outcome observations.
     bool_col_names : list[str] or str or None, optional
         Boolean columns to exclude from standardization.
+
+    Notes
+    -----
+    `unistat` does NOT standardize the values of `y` for linear regression.
+    Typically, "standardized regression" refers to a transformation of
+    :math:`y \sim X` such that
+    :math:`\text{SD}\left( y \right) \sim \text{SD}\left( X \right)`; a
+    coefficient :math:`\beta` is thus interpreted as a 1-S.D. increase in
+    :math:`X` conferring a :math:`\beta` S.D. increase in :math:`y`. We find
+    this to be difficult to interpret, with no benefit beyond adherence to
+    convention.
+
+    Instead, `unistat` opts for "X-standardized regression". That is, since only
+    :math:`X` is Z-scored, :math:`y \sim X` is transformed such that
+    :math:`y \sim \text{SD}\left( X \right)`. Here, a coefficient :math:`\beta`
+    is interpreted as a 1-S.D. increase in :math:`X` conferring an absolute
+    increase of :math:`\beta` units in :math:`y`. This is more easily
+    interpretable, while still allowing comparison of the relative strengths of
+    all :math:`X` predictors.
     """
 
     def __init__(self, X, y, bool_col_names: list | str | None = None):

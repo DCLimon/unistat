@@ -1,6 +1,6 @@
 [project]
 name = "unistat"
-version = "0.2.3"
+version = "0.2.4"
 description = "A unified statistics interface for running and displaying simple stats, using SciPy and statsmodels."
 readme = "README.md"
 authors = [
@@ -12,6 +12,7 @@ dependencies = [
     "pandas>=2.0.0",
     "scipy>=1.10.0",
     "statsmodels>=0.14.0",
+    "patsy>=1.0.1"
 ]
 
 [project.scripts]
