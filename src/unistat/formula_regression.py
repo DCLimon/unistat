@@ -30,21 +30,15 @@ Notes
 Assumes input data are pandas Series/DataFrames. Handles boolean columns
 specially in standardization.
 """
-
 import ast
 import re
 from abc import ABC, abstractmethod
 from collections import namedtuple
-from typing import Optional
 import numpy as np
 import pandas as pd
 import patsy
-from scipy import stats
 import statsmodels.api as sm
-from statsmodels import formula
 from statsmodels.stats.outliers_influence import variance_inflation_factor
-from .exceptions import warn_experimental
-from .regression import RegressionStats
 
 
 # For functions giving separate results for Patsy formula LHS & RHS
@@ -533,139 +527,3 @@ class FormulaLinReg(FormulaRegression):
             model = sm.OLS.from_formula(self._formula_std, self._data_std)
             self._std_reg_cache = model.fit()
             return self._std_reg_cache
-
-
-class FormulaRegressionV1(ABC):
-
-
-    def __init__(self,
-                 formula: str,
-                 data: pd.DataFrame):
-        self.formula = formula
-
-        formula_cols = FormulaRegressionV1.extract_formula_cols(self.formula)
-        self.data = (
-            data[formula_cols].copy()
-            .dropna()
-            .apply(pd.to_numeric, errors='coerce')
-            .astype('float64')
-        )
-
-        # Use patsy to transform input DF to features for modeling
-        self.y, self.X = patsy.highlevel.dmatrices(
-            self.formula,
-            self.data,
-            return_type='dataframe'
-        )
-        self.y = self.y[self._extract_formula_y()]  # Convert to Series
-
-    def _extract_formula_X(self) -> list[str]:
-        """Get predictor (X) column names from formula string.
-
-        Returns
-        -------
-        list[str]
-            List of predictor (X) column names.
-        """
-        # Use Patsy ModelDesc to structure the formula
-        model_desc = patsy.ModelDesc.from_formula(self.formula)
-
-        # Collect all unique factor names from the RHS (X)
-        X = set()
-        for term in model_desc.rhs_termlist:
-            for factor in term.factors:
-                X.add(factor.name())
-
-        return list(X)
-
-    def _extract_formula_y(self) -> str:
-        """Get outcome (y) column name from formula string.
-
-        Returns
-        -------
-        str
-            Outcome (y) column name.
-
-        Raises
-        ------
-        ValueError
-            `y` (LHS) resolves to more than 1 column.
-        """
-        # Use Patsy ModelDesc to structure the formula
-        model_desc = patsy.ModelDesc.from_formula(self.formula)
-
-        # Ensure only 1 outcome column
-        if len(model_desc.lhs_termlist) > 1:
-            raise ValueError('Formula resolves to more than 1 outcome (y) '
-                             'column.')
-
-        # Extract y from left-hand side (LHS) of formula
-        return model_desc.lhs_termlist[0].factors[0].name()
-
-    @staticmethod
-    def extract_formula_cols(formula: str) -> list[str]:
-        """Get unique list of columns, given Patsy/R formula.
-
-        Intended to help filter a DF for only column included in the regression
-        model, when describing the model via a formula.
-
-        Parameters
-        ----------
-        formula : str
-            Patsy/R formula string.
-
-        Returns
-        -------
-        list[str]
-            List of unique column name strings.
-        """
-        # Use Patsy ModelDesc to structure the formula
-        model_desc = patsy.ModelDesc.from_formula(formula)
-
-        # Collect all unique factor names from the LHS (y) and RHS (X)
-        factors = set()
-        for termlist in [model_desc.rhs_termlist, model_desc.lhs_termlist]:
-            for term in termlist:
-                for factor in term.factors:
-                    factors.add(factor.name())
-
-        # Convert the set to a list for the final result
-        cols = list(factors)
-
-        return cols
-
-    @staticmethod
-    def extract_categorical_cols(formula: str, data: pd.DataFrame) -> list[str]:
-        """
-        Extracts the names of original columns treated as categorical by a patsy formula.
-
-        Args:
-            formula_str (str) : The patsy formula string (e.g., "y ~ a + C(b)").
-            data (dict or pandas.DataFrame) : The data used with the formula.
-
-        Returns:
-            list : A list of column names that patsy treats as categorical.
-        """
-        # Parse the formula into a ModelDesc object
-        model_desc = patsy.ModelDesc.from_formula(formula)
-
-        # Combine LHS and RHS terms
-        rhs_terms = model_desc.rhs_termlist
-        # all_terms = model_desc.lhs_termlist + model_desc.rhs_termlist
-
-        cat_cols = set()
-
-        for term in rhs_terms:
-            for factor in term.factors:
-                col_name = factor.name()
-
-        design_info = \
-        patsy.build_design_matrices([model_desc.lhs, model_desc.rhs], data, return_info=True)[2]
-
-        for term, codings in design_info.term_codings.items():
-            for coding in codings:
-                # The 'factor' attribute of SubtermInfo gives the original factor
-                factor = coding.factors
-                # The 'categories' attribute is None for numerical, a tuple/list for categorical
-                if coding.categories is not None:
-                    cat_cols.add(factor.name())

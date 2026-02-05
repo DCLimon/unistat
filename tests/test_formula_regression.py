@@ -4,15 +4,12 @@
 ################################################################################
 
 # Import standard packages
-import pathlib
 # Import 3rd party packages
-import numpy as np
 import pandas as pd
-import polars as pl
 import statsmodels.api as sm
 # Import local modules
 from tests.test_project.dataprep import prep_data
-from unistat.formula_regression import FormulaLogit, FormulaLinReg
+from unistat import FormulaLogit, FormulaLinReg
 
 
 # Data Formatting ==============================================================
