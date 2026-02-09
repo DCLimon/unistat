@@ -5,7 +5,7 @@
 
 # Imports
 import pandas as pd
-from tests.test_project.dataprep import prep_data
+from tests.test_project.dataprep import get_outcome_df
 from unistat import (
     MulticlassContingencyStats,
     LogitStats,
@@ -20,7 +20,7 @@ pd.set_option('mode.copy_on_write', 'warn')
 
 # Data Formatting ==============================================================
 
-outcome_df = prep_data()
+outcome_df = get_outcome_df()
 
 
 ################################################################################

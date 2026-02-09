@@ -8,13 +8,13 @@
 import pandas as pd
 import statsmodels.api as sm
 # Import local modules
-from tests.test_project.dataprep import prep_data
+from tests.test_project.dataprep import get_outcome_df
 from unistat import FormulaLogit, FormulaLinReg
 
 
 # Data Formatting ==============================================================
 
-outcome_df = prep_data()
+outcome_df = get_outcome_df()
 
 
 ################################################################################
