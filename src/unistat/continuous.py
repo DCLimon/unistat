@@ -728,12 +728,15 @@ class MultiSeries1WayBGStats:
         -------
         str
             Formatted summary and test results (t-test or Mann-Whitney U)."""
-        if self.parametric:
-            return (f'{self.parametric_summ_stats()}\n'
-                    f'{self.anova()}')
-        else:
-            return (f'{self.nonparametric_summ_stats()}\n'
-                    f'{self.kruskal_wallis()}')
+        with pd.option_context('display.max_colwidth', None,
+                               'max_colwidth', None,
+                               'display.width', 256):
+            if self.parametric:
+                return (f'{self.parametric_summ_stats()}\n'
+                        f'{self.anova()}')
+            else:
+                return (f'{self.nonparametric_summ_stats()}\n'
+                        f'{self.kruskal_wallis()}')
 
     def conf_int(self,
                  pct_ci: float = None,
@@ -844,7 +847,8 @@ class MultiSeries1WayBGStats:
                     ),
                 } for col in self.data.columns.tolist()
             },
-        )
+        ).astype('Float64')
+
         return summ_stats
 
     def anova(self, equal_var: bool = False) -> pd.Series:
@@ -885,7 +889,7 @@ class MultiSeries1WayBGStats:
                 'dof_T': self.data.shape[0] - 1,
                 'p-value': result.pvalue,
             }
-        )
+        ).astype('Float64')
 
         return output
 
@@ -911,7 +915,7 @@ class MultiSeries1WayBGStats:
         summ_stats = pd.DataFrame(
             data={
                 col: {
-                    'n': self.data.count(),
+                    'n': self.data[col].count(),
                     'min': self.data[col].quantile(quantiles).loc[0],
                     'q1': self.data[col].quantile(quantiles).loc[0.25],
                     'median': self.data[col].quantile(quantiles).loc[0.5],
@@ -921,7 +925,7 @@ class MultiSeries1WayBGStats:
                             - self.data[col].quantile(quantiles).loc[0.25]),
                 } for col in self.data.columns.tolist()
             },
-        )
+        ).astype('Float64')
 
         return summ_stats
 
@@ -954,7 +958,7 @@ class MultiSeries1WayBGStats:
                 'dof': self.data.shape[1] - 1,
                 'p-value': result.pvalue,
             }
-        )
+        ).astype('Float64')
 
         return output
 
