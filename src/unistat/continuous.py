@@ -191,7 +191,7 @@ class TwoSeriesStats:
             SeriesNameCollisionWarning('`test` and `control` have '
                                        'the same column name.')
             test = test.rename(f'{test.name}_TEST')
-            control = control.rename(f'{test.name}_CTRL')
+            control = control.rename(f'{control.name}_CTRL')
         self.test = test.dropna().reset_index(drop=True)
         self.control = control.dropna().reset_index(drop=True)
         self.parametric = parametric
@@ -586,130 +586,8 @@ class MultiSeries1WayBGStats:
                  parametric: bool = True,
                  alpha_level: float = .05,
                  **named_data: pd.Series | pd.DataFrame):
-        def parse_input_data(*input_data,
-                             **input_named_data) -> list[pd.Series]:
-            output_list = []
-
-
-            def parse_input_df(input_df: pd.DataFrame) -> None:
-                # Ensure at least 2 columns, then assign columns to series_list
-                if input_df.shape[1] >= 2:
-                    for col in input_df.columns:
-                        output_list.append(input_df[col])
-                else:
-                    raise ValueError(
-                        'If passing a single DataFrame as a positional `data` '
-                        'arg or `data=df`kwarg, the DataFrame must have at '
-                        'least 2 columns.'
-                    )
-
-
-            # Ensure exactly 1 paradigm used
-            if input_data and input_named_data:
-                raise ValueError('Cannot pass both `data` & `named_data`.')
-
-            # If passing `data` as a kwarg: `data=pd.DataFrame()`
-            elif 'data' in input_named_data:
-                df = input_named_data.pop('data')
-
-                # Multiple named_data
-                if len(input_named_data) > 0:
-                    ValueError(
-                        'When using `data=df` argument to pass a DataFrame, '
-                        '`*data` positional args must be omitted, and '
-                        'no extra `**named_data` kwargs are permitted.'
-                    )
-                elif isinstance(df, pd.DataFrame):
-                    parse_input_df(df)
-                elif isinstance(df, pd.Series):
-                    raise ValueError('Pass Series data via `*data` positional '
-                                     'args or via `**named_data` kwargs.')
-                else:
-                    raise ValueError('`data=` must be pd.DataFrame or pd.Series.')
-
-            # If passing a single DataFrame to `data` as arg
-            elif (
-                # pd.DataFrame arg
-                (len(input_data) == 1)
-                and isinstance(input_data[0], pd.DataFrame)
-            ):
-                parse_input_df(input_data[0])
-
-            # If using `data` args
-            elif input_data:
-                # Ensure at least 2 args
-                if len(input_data) >= 2:
-                    for enum, series in enumerate(input_data):
-                        # If `data` includes a DataFrame, ensure it only has 1 col
-                        if isinstance(series, pd.DataFrame):
-                            if series.shape[1] == 1:
-                                series = series.iloc[:, 0]
-                            else:
-                                raise ValueError(
-                                    'When passing multiple args to `data`, '
-                                    'args must be pd.Series or single-column '
-                                    'pd.DataFrame.'
-                                )
-
-                        # Assign name/number to each series
-                        if hasattr(series, 'name'):
-                            series.name += f'__{enum}'
-                        else:
-                            series.name = enum
-                        output_list.append(series)
-
-                else:
-                    raise ValueError('When passing individual Series args to '
-                                     '`data`, at least 2 args must be passed.')
-
-            # If using `named_data` kwargs
-            elif input_named_data:
-                # Ensure at least 2 kwargs
-                if len(input_named_data) >= 2:
-                    for name, series in input_named_data.items():
-                        # If `data` includes a DataFrame, ensure only has 1 col
-                        if isinstance(series, pd.DataFrame):
-                            if series.shape[1] == 1:
-                                series = series.iloc[:, 0]
-                            else:
-                                raise ValueError(
-                                    'When passing multiple kwargs to '
-                                    '`named_data`, args must be a Series or '
-                                    'single-column DataFrame.'
-                                )
-
-                        series.name = name
-                        output_list.append(series)
-                else:
-                    raise ValueError('When using `named_data`, at least 2 '
-                                     'kwargs must be passed.')
-
-            # If `data` & `named_data` left blank
-            else:
-                raise ValueError('Must pass either `data` or `named_data`.')
-
-            return output_list
-
-        def check_duplicate_names(series_list: list[pd.Series]) -> list[str]:
-            series_names: list = [series.name for series in series_list]
-
-            # Set will be shorter than list if & only if duplicate column names
-            if len(set(series_names)) < len(series_names):
-
-                duplicates = series_names.copy()
-                for name in set(series_names):
-                    duplicates.remove(name)
-                duplicates = str(set(duplicates))[1:-1]  # Remove {} wrapper
-
-                raise SeriesNameCollisionError(
-                    '`data` cannot have duplicate column names.\n'
-                    f'Duplicates: {duplicates}'
-                )
-            else:
-                return series_names
-
-        series_list = parse_input_data(*data, **named_data)
-        check_duplicate_names(series_list)
+        series_list = self._parse_input_data(*data, **named_data)
+        self._check_duplicate_series_name(series_list)
 
         series_list = [series.dropna().reset_index(drop=True)
                        for series in series_list]
@@ -732,11 +610,11 @@ class MultiSeries1WayBGStats:
                                'max_colwidth', None,
                                'display.width', 256):
             if self.parametric:
-                return (f'{self.parametric_summ_stats()}\n'
-                        f'{self.anova()}')
+                return (f'{self.parametric_summ_stats().to_string()}\n'
+                        f'{self.anova().to_string()}')
             else:
-                return (f'{self.nonparametric_summ_stats()}\n'
-                        f'{self.kruskal_wallis()}')
+                return (f'{self.nonparametric_summ_stats().to_string()}\n'
+                        f'{self.kruskal_wallis().to_string()}')
 
     def conf_int(self,
                  pct_ci: float = None,
@@ -962,6 +840,130 @@ class MultiSeries1WayBGStats:
 
         return output
 
+    def _parse_input_data(self,
+                          *input_data,
+                          **input_named_data) -> list[pd.Series]:
+        output_list: list[pd.Series] = []
+
+        # Ensure exactly 1 paradigm used
+        if input_data and input_named_data:
+            raise ValueError('Cannot pass both `data` & `named_data`.')
+
+        # If passing `data` as a kwarg: `data=pd.DataFrame()`
+        elif 'data' in input_named_data:
+            df: pd.DataFrame = input_named_data.pop('data')
+
+            # Multiple named_data
+            if len(input_named_data) > 0:
+                ValueError(
+                    'When using `data=df` argument to pass a DataFrame, '
+                    '`*data` positional args must be omitted, and '
+                    'no extra `**named_data` kwargs are permitted.'
+                )
+            elif isinstance(df, pd.DataFrame):
+                output_list = self._parse_input_df(df)
+            elif isinstance(df, pd.Series):
+                raise ValueError('Pass Series data via `*data` positional '
+                                 'args or via `**named_data` kwargs.')
+            else:
+                raise ValueError('`data=` must be pd.DataFrame or pd.Series.')
+
+        # If passing a single DataFrame to `data` as arg
+        elif (
+                # pd.DataFrame arg
+                (len(input_data) == 1)
+                and isinstance(input_data[0], pd.DataFrame)
+        ):
+            output_list = self._parse_input_df(input_data[0])
+
+        # If using `data` args
+        elif input_data:
+            # Ensure at least 2 args
+            if len(input_data) >= 2:
+                for enum, series in enumerate(input_data):
+                    # If `data` includes a DataFrame, ensure it only has 1 col
+                    if isinstance(series, pd.DataFrame):
+                        if series.shape[1] == 1:
+                            series = series.iloc[:, 0]
+                        else:
+                            raise ValueError(
+                                'When passing multiple args to `data`, '
+                                'args must be pd.Series or single-column '
+                                'pd.DataFrame.'
+                            )
+
+                    # Assign name/number to each series
+                    if hasattr(series, 'name'):
+                        series.name += f'__{enum}'
+                    else:
+                        series.name = enum
+                    output_list.append(series)
+
+            else:
+                raise ValueError('When passing individual Series args to '
+                                 '`data`, at least 2 args must be passed.')
+
+        # If using `named_data` kwargs
+        elif input_named_data:
+            # Ensure at least 2 kwargs
+            if len(input_named_data) >= 2:
+                for name, series in input_named_data.items():
+                    # If `data` includes a DataFrame, ensure only has 1 col
+                    if isinstance(series, pd.DataFrame):
+                        if series.shape[1] == 1:
+                            series = series.iloc[:, 0]
+                        else:
+                            raise ValueError(
+                                'When passing multiple kwargs to '
+                                '`named_data`, args must be a Series or '
+                                'single-column DataFrame.'
+                            )
+
+                    series.name = name
+                    output_list.append(series)
+            else:
+                raise ValueError('When using `named_data`, at least 2 '
+                                 'kwargs must be passed.')
+
+        # If `data` & `named_data` left blank
+        else:
+            raise ValueError('Must pass either `data` or `named_data`.')
+
+        return output_list
+
+    def _parse_input_df(self, input_df: pd.DataFrame) -> list[pd.Series]:
+        output_list: list[pd.Series] = []
+        # Ensure at least 2 columns, then assign columns to series_list
+        if input_df.shape[1] >= 2:
+            for col in input_df.columns:
+                output_list.append(input_df[col])
+            return output_list
+
+        else:
+            raise ValueError(
+                'If passing a single DataFrame as a positional `data` '
+                'arg or `data=df`kwarg, the DataFrame must have at '
+                'least 2 columns.'
+            )
+
+    def _check_duplicate_series_name(self, series_list: list[pd.Series]):
+        series_names: list[str] = [series.name for series in series_list]
+
+        # Set will be shorter than list if & only if duplicate column names
+        if len(set(series_names)) < len(series_names):
+
+            duplicates = series_names.copy()
+            for name in set(series_names):
+                duplicates.remove(name)
+            duplicates = str(set(duplicates))[1:-1]  # Remove {} wrapper
+
+            raise SeriesNameCollisionError(
+                '`data` cannot have duplicate column names.\n'
+                f'Duplicates: {duplicates}'
+            )
+        else:
+            return series_names
+
 
 class MultiSample1WayBGStats(MultiSeries1WayBGStats):
     def __init__(self,
@@ -970,6 +972,16 @@ class MultiSample1WayBGStats(MultiSeries1WayBGStats):
                  cat_order: list[str] = None,
                  parametric: bool = True,
                  alpha_level: float = .05):
+        wide_df = self._parse_input_for_parent(cat_x, num_y, cat_order)
+
+        super().__init__(data=wide_df,
+                         parametric=parametric,
+                         alpha_level=alpha_level)
+
+    def _parse_input_for_parent(self,
+                                cat_x: pd.Series,
+                                num_y: pd.Series,
+                                cat_order: list[str] = None) -> pd.DataFrame:
         # Combine into a df
         df = (
             pd.concat([cat_x, num_y], axis='columns')
@@ -991,8 +1003,8 @@ class MultiSample1WayBGStats(MultiSeries1WayBGStats):
         else:
             # Ensure all used categories appear in cat_order
             missing = (
-                set(df[cat_x.name].unique()) - set(cat_order)
-                - {float('nan'), None, pd.NA}
+                    set(df[cat_x.name].unique()) - set(cat_order)
+                    - {float('nan'), None, pd.NA}
             )
             if missing:
                 raise ValueError(f'Categories in cat_x not found in cat_order: '
@@ -1013,6 +1025,4 @@ class MultiSample1WayBGStats(MultiSeries1WayBGStats):
             warnings.warn(f'Categories with no data after dropna '
                           f'(omitted): {missing}')
 
-        super().__init__(data=wide_df,
-                         parametric=parametric,
-                         alpha_level=alpha_level)
+        return wide_df
