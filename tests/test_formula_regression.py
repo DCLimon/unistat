@@ -100,6 +100,25 @@ linreg = FormulaLinReg(
 print(linreg)
 
 
+# All-categorical OLS
+print(FormulaLinReg(
+    formula=(
+        "wb_total_4h"
+        "~ C(mutex_ca_grams_per_unit_4h_binned, Treatment('< 0.25 g/U'))"
+    ),
+    data=outcome_df
+))
+
+# All-categorical Logit
+print(FormulaLogit(
+    formula=(
+        "mortality_24h"
+        "~ C(mutex_ca_grams_per_unit_4h_binned, Treatment('< 0.25 g/U'))"
+    ),
+    data=outcome_df
+))
+
+
 ################################################################################
 # Main
 ################################################################################

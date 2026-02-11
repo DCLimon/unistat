@@ -107,7 +107,7 @@ class FormulaRegression(ABC):
         else:
             print_string = f'{self.reg.summary2().as_text()}\n'
 
-        if self.std_reg is not None:
+        if hasattr(self, 'std_reg'):
             print_string += f'{self.std_reg.summary2().as_text()}\n'
 
         return print_string
@@ -478,7 +478,7 @@ class FormulaLogit(FormulaRegression):
                     f'{self.logit_or().to_string()}\n'
                 )
 
-            if self.std_reg is not None:
+            if hasattr(self, 'std_reg'):
                 print_string += (
                     f'{self.std_reg.summary2().as_text()}\n'
                     f'{self.logit_or(standardize=True).to_string()}\n'
