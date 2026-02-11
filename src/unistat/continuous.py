@@ -33,11 +33,14 @@ tests, boolean for grouping). Handles missing data by dropping NaNs.
 import warnings
 from typing import Literal
 from collections import namedtuple
+from itertools import combinations
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype, is_categorical_dtype
 from scipy import stats
+from statsmodels.stats.multitest import multipletests
 from .exceptions import SeriesNameCollisionError, SeriesNameCollisionWarning
+from ._types import PCorrectionMethod
 
 
 class CorrStats:
@@ -372,8 +375,8 @@ class TwoSeriesStats:
         output = pd.Series(
             {
                 't-statistic': result.statistic,
-                'welch_df': result.df,
-                'student_df': (
+                'welch_dof': result.df,
+                'student_dof': (
                     (self.test.count() - 1) + (self.control.count() - 1)
                 ),
                 'p-value': result.pvalue,
@@ -586,18 +589,23 @@ class MultiSeries1WayBGStats:
                  parametric: bool = True,
                  alpha_level: float = .05,
                  **named_data: pd.Series | pd.DataFrame):
-        series_list = self._parse_input_data(*data, **named_data)
-        self._check_duplicate_series_name(series_list)
+        self._input_data: tuple = data
+        self._input_named_data: dict = named_data
+        self._series_list: list[pd.Series] = self._parse_input_data()
+        self._check_duplicate_series_name()  # Error checking, no returns
 
-        series_list = [series.dropna().reset_index(drop=True)
-                       for series in series_list]
+        self._series_list = [series.dropna().reset_index(drop=True)
+                             for series in self._series_list]
 
-        self.data = pd.concat(
-            objs=series_list,
+        self.parametric: bool = parametric
+        self.alpha: float = alpha_level
+
+    @property
+    def data(self) -> pd.DataFrame:
+        return pd.concat(
+            objs=self._series_list,
             axis='columns',
         )
-        self.parametric = parametric
-        self.alpha = alpha_level
 
     def __str__(self):
         """String representation of summary statistics and test results.
@@ -610,11 +618,21 @@ class MultiSeries1WayBGStats:
                                'max_colwidth', None,
                                'display.width', 256):
             if self.parametric:
-                return (f'{self.parametric_summ_stats().to_string()}\n'
-                        f'{self.anova().to_string()}')
+                output_str = (
+                    f'{self.parametric_summ_stats().to_string()}\n'
+                    f'{self.anova().to_string()}'
+                )
+                if self._omnibus_sig:
+                    output_str += f'\n{self.pairwise_t().to_string()}'
             else:
-                return (f'{self.nonparametric_summ_stats().to_string()}\n'
-                        f'{self.kruskal_wallis().to_string()}')
+                output_str = (
+                    f'{self.nonparametric_summ_stats().to_string()}\n'
+                    f'{self.kruskal_wallis().to_string()}'
+                )
+                if self._omnibus_sig:
+                    output_str += f'\n{self.pairwise_mwu().to_string()}'
+
+            return output_str
 
     def conf_int(self,
                  pct_ci: float = None,
@@ -840,28 +858,41 @@ class MultiSeries1WayBGStats:
 
         return output
 
-    def _parse_input_data(self,
-                          *input_data,
-                          **input_named_data) -> list[pd.Series]:
+    def _parse_input_data(self) -> list[pd.Series]:
         output_list: list[pd.Series] = []
 
+        def parse_input_df(input_df: pd.DataFrame) -> list[pd.Series]:
+            df_list: list[pd.Series] = []
+            # Ensure at least 2 columns, then assign columns to series_list
+            if input_df.shape[1] >= 2:
+                for col in input_df.columns:
+                    df_list.append(input_df[col])
+                return df_list
+
+            else:
+                raise ValueError(
+                    'If passing a single DataFrame as a positional `data` '
+                    'arg or `data=df`kwarg, the DataFrame must have at '
+                    'least 2 columns.'
+                )
+
         # Ensure exactly 1 paradigm used
-        if input_data and input_named_data:
+        if self._input_data and self._input_named_data:
             raise ValueError('Cannot pass both `data` & `named_data`.')
 
         # If passing `data` as a kwarg: `data=pd.DataFrame()`
-        elif 'data' in input_named_data:
-            df: pd.DataFrame = input_named_data.pop('data')
+        elif 'data' in self._input_named_data:
+            df: pd.DataFrame = self._input_named_data['data']
 
             # Multiple named_data
-            if len(input_named_data) > 0:
+            if len(self._input_named_data) > 1:
                 ValueError(
                     'When using `data=df` argument to pass a DataFrame, '
                     '`*data` positional args must be omitted, and '
                     'no extra `**named_data` kwargs are permitted.'
                 )
             elif isinstance(df, pd.DataFrame):
-                output_list = self._parse_input_df(df)
+                output_list = parse_input_df(df)
             elif isinstance(df, pd.Series):
                 raise ValueError('Pass Series data via `*data` positional '
                                  'args or via `**named_data` kwargs.')
@@ -871,16 +902,16 @@ class MultiSeries1WayBGStats:
         # If passing a single DataFrame to `data` as arg
         elif (
                 # pd.DataFrame arg
-                (len(input_data) == 1)
-                and isinstance(input_data[0], pd.DataFrame)
+                (len(self._input_data) == 1)
+                and isinstance(self._input_data[0], pd.DataFrame)
         ):
-            output_list = self._parse_input_df(input_data[0])
+            output_list = parse_input_df(self._input_data[0])
 
         # If using `data` args
-        elif input_data:
+        elif self._input_data:
             # Ensure at least 2 args
-            if len(input_data) >= 2:
-                for enum, series in enumerate(input_data):
+            if len(self._input_data) >= 2:
+                for enum, series in enumerate(self._input_data):
                     # If `data` includes a DataFrame, ensure it only has 1 col
                     if isinstance(series, pd.DataFrame):
                         if series.shape[1] == 1:
@@ -904,10 +935,10 @@ class MultiSeries1WayBGStats:
                                  '`data`, at least 2 args must be passed.')
 
         # If using `named_data` kwargs
-        elif input_named_data:
+        elif self._input_named_data:
             # Ensure at least 2 kwargs
-            if len(input_named_data) >= 2:
-                for name, series in input_named_data.items():
+            if len(self._input_named_data) >= 2:
+                for name, series in self._input_named_data.items():
                     # If `data` includes a DataFrame, ensure only has 1 col
                     if isinstance(series, pd.DataFrame):
                         if series.shape[1] == 1:
@@ -931,23 +962,8 @@ class MultiSeries1WayBGStats:
 
         return output_list
 
-    def _parse_input_df(self, input_df: pd.DataFrame) -> list[pd.Series]:
-        output_list: list[pd.Series] = []
-        # Ensure at least 2 columns, then assign columns to series_list
-        if input_df.shape[1] >= 2:
-            for col in input_df.columns:
-                output_list.append(input_df[col])
-            return output_list
-
-        else:
-            raise ValueError(
-                'If passing a single DataFrame as a positional `data` '
-                'arg or `data=df`kwarg, the DataFrame must have at '
-                'least 2 columns.'
-            )
-
-    def _check_duplicate_series_name(self, series_list: list[pd.Series]):
-        series_names: list[str] = [series.name for series in series_list]
+    def _check_duplicate_series_name(self) -> None:
+        series_names: list[str] = [series.name for series in self._series_list]
 
         # Set will be shorter than list if & only if duplicate column names
         if len(set(series_names)) < len(series_names):
@@ -961,8 +977,111 @@ class MultiSeries1WayBGStats:
                 '`data` cannot have duplicate column names.\n'
                 f'Duplicates: {duplicates}'
             )
+
+    @property
+    def _omnibus_sig(self) -> bool:
+        if self.parametric:
+            p = self.anova()['p-value']
         else:
-            return series_names
+            p = self.kruskal_wallis()['p-value']
+
+        if p <= self.alpha:
+            return True
+        else:
+            return False
+
+    @property
+    def _pairwise_columns(self) -> list[tuple[str, str]]:
+        col_names: list[str] = self.data.columns.tolist()
+        return list(combinations(col_names, 2))
+
+    def pairwise_t(self,
+                   equal_var: bool = False,
+                   p_corr_method: PCorrectionMethod = 'holm') -> pd.DataFrame:
+        t_results: list[pd.Series] = []
+
+        # Run t-test for each column pair
+        for col_pair in self._pairwise_columns:
+            t_obj = TwoSeriesStats(
+                control=self.data[col_pair[0]],
+                test=self.data[col_pair[1]],
+                alpha_level=self.alpha,
+                parametric=True
+            )
+            # Add columns for control/test names
+            t_result: pd.Series = t_obj.t_test()
+            t_results.append(t_result)
+
+        t_results_df: pd.DataFrame = pd.concat(
+            objs=t_results,
+            axis='columns',
+        ).T
+        t_results_df.index = pd.MultiIndex.from_tuples(
+            self._pairwise_columns,
+            names=['control', 'test'],
+        )
+
+        # Add column of corrected p-values
+        t_results_df['p_corr'] = multipletests(
+            pvals=t_results_df['p-value'],
+            alpha=self.alpha,
+            method=p_corr_method,
+        )[1]
+
+        return t_results_df
+
+    def pairwise_mwu(self,
+                     p_corr_method: PCorrectionMethod = 'holm') -> pd.DataFrame:
+        mwu_results: list[pd.Series] = []
+        mwu_ha_map: dict[str, str] = {
+            '<': 'control > test',
+            '>': 'control < test',
+            '!=': 'control != test',
+            '=': 'control = test',
+        }
+
+        # Run t-test for each column pair
+        for col_pair in self._pairwise_columns:
+            mwu_obj = TwoSeriesStats(
+                control=self.data[col_pair[0]],
+                test=self.data[col_pair[1]],
+                alpha_level=self.alpha,
+                parametric=False
+            )
+
+            # Add column to show direction of effect
+            mwu_ha: str = mwu_ha_map[
+                mwu_obj.nonparametric_summ_stats().at['n', 'Ha']
+            ]
+            mwu_result: pd.Series = mwu_obj.mwu_test()
+            mwu_result = pd.concat(
+                objs=[
+                    pd.Series({'Ha': mwu_ha}),
+                    mwu_result,
+                ],
+                axis='rows',
+            )
+
+            mwu_results.append(mwu_result)
+
+        mwu_results_df: pd.DataFrame = pd.concat(
+            objs=mwu_results,
+            axis='columns',
+        ).T
+        mwu_results_df.index = pd.MultiIndex.from_tuples(
+            self._pairwise_columns,
+            names=['control', 'test'],
+        )
+
+        # Add column of corrected p-values
+        mwu_results_df['p_corr'] = multipletests(
+            pvals=mwu_results_df['p-value'],
+            alpha=self.alpha,
+            method=p_corr_method,
+        )[1]
+
+        return mwu_results_df
+
 
 
 class MultiSample1WayBGStats(MultiSeries1WayBGStats):
@@ -972,16 +1091,6 @@ class MultiSample1WayBGStats(MultiSeries1WayBGStats):
                  cat_order: list[str] = None,
                  parametric: bool = True,
                  alpha_level: float = .05):
-        wide_df = self._parse_input_for_parent(cat_x, num_y, cat_order)
-
-        super().__init__(data=wide_df,
-                         parametric=parametric,
-                         alpha_level=alpha_level)
-
-    def _parse_input_for_parent(self,
-                                cat_x: pd.Series,
-                                num_y: pd.Series,
-                                cat_order: list[str] = None) -> pd.DataFrame:
         # Combine into a df
         df = (
             pd.concat([cat_x, num_y], axis='columns')
@@ -1025,4 +1134,6 @@ class MultiSample1WayBGStats(MultiSeries1WayBGStats):
             warnings.warn(f'Categories with no data after dropna '
                           f'(omitted): {missing}')
 
-        return wide_df
+        super().__init__(data=wide_df,
+                         parametric=parametric,
+                         alpha_level=alpha_level)

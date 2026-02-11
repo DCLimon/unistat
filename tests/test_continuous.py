@@ -204,6 +204,34 @@ def anova_ints_from_kwargs() -> MultiSeries1WayBGStats:
     )
 
 
+def anova_ints_with_posthoc() -> MultiSeries1WayBGStats:
+    levels = ['< 0.5g', '0.5 - 1.0g', '1.0 - 2.0g', '>= 2.0g']
+    seriess: list = []
+
+    df = pd.cut(
+        outcome_df['ca_grams_4h'],
+        bins=[0, 0.5, 1.0, 2.0, 1000],
+        labels=levels,
+        include_lowest=True
+    )
+    df = pd.concat(objs=[df, outcome_df['wb_total_4h']], axis='columns')
+
+    for level in levels:
+        series = outcome_df.loc[
+            df['ca_grams_4h'] == level,
+            'wb_total_4h'
+        ]
+        series.name = series.name + f'__{level}'
+        seriess.append(series)
+
+    df = pd.concat(objs=seriess, axis='columns')
+
+    return MultiSeries1WayBGStats(
+        data=df,
+        parametric=True
+    )
+
+
 # +----------------+
 # | Kruskal-Wallis |
 # +----------------+
@@ -292,6 +320,34 @@ def kw_ints_from_kwargs() -> MultiSeries1WayBGStats:
     )
 
 
+def kw_ints_with_posthoc() -> MultiSeries1WayBGStats:
+    levels = ['< 0.5g', '0.5 - 1.0g', '1.0 - 2.0g', '>= 2.0g']
+    seriess: list = []
+
+    df = pd.cut(
+        outcome_df['ca_grams_4h'],
+        bins=[0, 0.5, 1.0, 2.0, 1000],
+        labels=levels,
+        include_lowest=True
+    )
+    df = pd.concat(objs=[df, outcome_df['wb_total_4h']], axis='columns')
+
+    for level in levels:
+        series = outcome_df.loc[
+            df['ca_grams_4h'] == level,
+            'wb_total_4h'
+        ]
+        series.name = series.name + f'__{level}'
+        seriess.append(series)
+
+    df = pd.concat(objs=seriess, axis='columns')
+
+    return MultiSeries1WayBGStats(
+        data=df,
+        parametric=False
+    )
+
+
 # MultiSample1WayBGStats =======================================================
 
 # +-------+
@@ -302,9 +358,6 @@ def anova_ints_vs_categories() -> MultiSample1WayBGStats:
     return MultiSample1WayBGStats(
         cat_x=outcome_df['mutex_elemental_ca_mg_per_unit_4h_binned'],
         num_y=outcome_df['los'],
-        cat_order=[
-            '< 23.25 mg/U', '23.25 - 31 mg/U', '31 - 46.5 mg/U', '>= 46.5 mg/U',
-        ],
         parametric=True
     )
 
@@ -313,6 +366,29 @@ def anova_ints_vs_ordered_categories() -> MultiSample1WayBGStats:
     return MultiSample1WayBGStats(
         cat_x=outcome_df['mutex_elemental_ca_mg_per_unit_4h_binned'],
         num_y=outcome_df['los'],
+        cat_order=[
+            '< 23.25 mg/U', '23.25 - 31 mg/U', '31 - 46.5 mg/U', '>= 46.5 mg/U',
+        ],
+        parametric=True
+    )
+
+
+def anova_ordered_categories_with_posthoc() -> MultiSeries1WayBGStats:
+    levels = ['< 0.5g', '0.5 - 1.0g', '1.0 - 2.0g', '>= 2.0g']
+    seriess: list = []
+
+    df = pd.cut(
+        outcome_df['ca_grams_4h'],
+        bins=[0, 0.5, 1.0, 2.0, 1000],
+        labels=levels,
+        include_lowest=True
+    )
+    df = pd.concat(objs=[df, outcome_df['wb_total_4h']], axis='columns')
+
+    return MultiSample1WayBGStats(
+        cat_x=df['ca_grams_4h'],
+        num_y=outcome_df['wb_total_4h'],
+        cat_order=levels,
         parametric=True
     )
 
@@ -340,22 +416,46 @@ def kw_ints_vs_ordered_categories() -> MultiSample1WayBGStats:
     )
 
 
+def kw_ordered_categories_with_posthoc() -> MultiSeries1WayBGStats:
+    levels = ['< 0.5g', '0.5 - 1.0g', '1.0 - 2.0g', '>= 2.0g']
+    seriess: list = []
+
+    df = pd.cut(
+        outcome_df['ca_grams_4h'],
+        bins=[0, 0.5, 1.0, 2.0, 1000],
+        labels=levels,
+        include_lowest=True
+    )
+    df = pd.concat(objs=[df, outcome_df['wb_total_4h']], axis='columns')
+
+    return MultiSample1WayBGStats(
+        cat_x=df['ca_grams_4h'],
+        num_y=outcome_df['wb_total_4h'],
+        cat_order=levels,
+        parametric=False
+    )
+
+
 def print_multilevel_stats() -> None:
     # MultiSeries1WayBGStats
     print(anova_ints_from_dataframe_arg())
     print(anova_ints_from_dataframe_kwarg())
     print(anova_ints_from_args())
     print(anova_ints_from_kwargs())
+    print(anova_ints_with_posthoc())
     print(kw_ints_from_dataframe_arg())
     print(kw_ints_from_dataframe_kwarg())
     print(kw_ints_from_args())
     print(kw_ints_from_kwargs())
+    print(kw_ints_with_posthoc())
 
     # MultiSample1WayBGStats
     print(anova_ints_vs_categories())
     print(anova_ints_vs_ordered_categories())
+    print(anova_ordered_categories_with_posthoc())
     print(kw_ints_vs_categories())
     print(kw_ints_vs_ordered_categories())
+    print(kw_ordered_categories_with_posthoc())
 
 
 ################################################################################
