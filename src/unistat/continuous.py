@@ -1,4 +1,4 @@
-"""Module for statistical analysis of continuous data.
+r"""Module for statistical analysis of continuous data.
 
 This module provides classes for analyzing relationships between two continuous
 or categorical series, including correlation tests, two-sample comparisons, and
@@ -24,11 +24,17 @@ TwoSampleStats
     Class for two-sample comparisons with a boolean grouping variable.
 ControlTestStats
     Named tuple for storing confidence intervals of control and test groups.
+MultiSeries1WayBGStats
+    Class for 1-way between-group statistical comparisons cross 3+ levels.
+MultiSample1WayBGStats
+    MultiSeries1WayBGStats
+    Class for 1-way between-group comparisons with a categorical
+    grouping variable (3+ levels).
 
 Notes
 -----
 Assumes input series are appropriately typed (e.g., continuous for numerical
-tests, boolean for grouping). Handles missing data by dropping NaNs.
+tests, boolean/categorical for grouping). Handles missing data by dropping NaNs.
 """
 import warnings
 from typing import Literal
@@ -44,7 +50,7 @@ from ._types import PCorrectionMethod
 
 
 class CorrStats:
-    """Class for computing correlation statistics between two continuous series.
+    r"""Compute correlation statistics between two continuous series.
 
     Supports Pearson (parametric) or Spearman (nonparametric) correlation.
 
@@ -148,7 +154,7 @@ class CorrStats:
 
 
 class TwoSeriesStats:
-    """Compare 2 continuous series using parametric or nonparametric tests.
+    r"""Compare 2 continuous series using parametric or nonparametric tests.
 
     Supports asymptotic t-tests (parametric) or Mann-Whitney U-tests
     (nonparametric).
@@ -468,9 +474,10 @@ class TwoSeriesStats:
 
 
 class TwoSampleStats(TwoSeriesStats):
-    """Class for comparing a continuous outcome across two groups defined by a boolean variable.
+    r"""Compare continuous outcome across 2 groups defined by a boolean variable.
 
-    Extends TwoSeriesStats to split a continuous series by a boolean grouping variable.
+    Extends TwoSeriesStats to split a continuous series by a boolean grouping
+    variable.
 
     Parameters
     ----------
@@ -584,6 +591,67 @@ ControlTestStats = namedtuple('ControlTestStats',
 
 
 class MultiSeries1WayBGStats:
+    r"""Compare 3+ continuous series using parametric or nonparametric tests.
+
+    Class is intended for data formatted as 3+ ``pd.Series`` objects, with a
+    Series of continuous dependent variable (DV) data for each level of the
+    categorical independent variable (IV). This is commonly encountered when
+    there are separate DataFrames for each group/category, each of which has
+    a column for the same numeric outcome.
+
+    Supports asymptotic analysis of variance (Welch ANOVA) tests (parametric),
+    or Kruskal-Wallis tests (nonparametric).
+
+    Also implements post hoc testing with automatic *p*-value correction for
+    multiple comparisons (Holm-Bonferroni method by default).
+    * parametric post hoc tests via pairwise Welch t-tests.
+    * nonparametric post hoc tests via pairwise Mann-Whitney U-tests.
+
+    Parameters
+    ----------
+    *data : pd.Series | pd.DataFrame
+        Series of outcome data is passed for each category/level. Series will be
+        converted to DataFrame columns in the order they are passed. If present,
+        Series names will be appended with an index value (``__0``, ``__1``,
+        etc.); unnamed Series will be named with their equivalent integer index.
+        A **single** DataFrame can also be passed as an argument, in which case
+        column names will be used as Series names.
+    parametric : bool, default True
+        If True, use ANOVA; otherwise, Kruskal-Wallis.
+    alpha_level : float, default 0.05
+        Significance level for confidence intervals and tests.
+    **named_data : pd.Series | pd.DataFrame
+        Keyword arguments may be used to override automatic, index-based
+        Series names (e.g., ``new_name1=series1, new_name2=series2``, etc.).
+        ``data`` Is a protected keyword, reserved for passing a single DataFrame
+        as ``data=df``.
+
+    Attributes
+    ----------
+    data : pd.DataFrame
+        All passed Series, concatenated as columns, with reassigned unique
+        column names.
+    parametric : bool
+        Whether to use parametric or nonparametric methods.
+    alpha : float
+        Significance level.
+
+    See Also
+    --------
+    MultiSample1WayBGStats :
+        Same tests, starting from a categorical grouping column (x) and a
+        numeric outcome column (y). Useful when all data is derived from a
+        single DataFrame.
+
+    Notes
+    -----
+    Series may be passed **either** as positional arguments (``*data``)**, or as
+    named keyword arguments (``**named_data``), **but not both**. If all Series
+    are contained as a single DataFrame, the DataFrame may be passed either
+    as a ``data=df`` keyword argument (preferred for clarity), or as the lone
+    ``*data`` argument. For this reason, ``data`` is a protected name for
+    ``**named_data`` keyword arguments.
+    """
     def __init__(self,
                  *data: pd.Series | pd.DataFrame,
                  parametric: bool = True,
@@ -608,12 +676,6 @@ class MultiSeries1WayBGStats:
         )
 
     def __str__(self):
-        """String representation of summary statistics and test results.
-
-        Returns
-        -------
-        str
-            Formatted summary and test results (t-test or Mann-Whitney U)."""
         with pd.option_context('display.max_colwidth', None,
                                'max_colwidth', None,
                                'display.width', 256):
@@ -710,7 +772,7 @@ class MultiSeries1WayBGStats:
         return pd.DataFrame(data=res_dict, index=['ci_lower', 'ci_upper'])
 
     def parametric_summ_stats(self, alpha_level: float = None) -> pd.DataFrame:
-        """Compute parametric summary statistics (mean, std, CI, etc.).
+        r"""Compute parametric summary statistics (mean, std, CI, etc.).
 
         Parameters
         ----------
@@ -720,7 +782,7 @@ class MultiSeries1WayBGStats:
         Returns
         -------
         pd.DataFrame
-            Summary statistics for each column in `data`.
+            Summary statistics for each column in ``data``.
         """
         if alpha_level is None:
             alpha_level = self.alpha
@@ -748,21 +810,21 @@ class MultiSeries1WayBGStats:
         return summ_stats
 
     def anova(self, equal_var: bool = False) -> pd.Series:
-        """Perform 1-way between-samples analysis of variance (ANOVA).
+        r"""Perform 1-way between-groups analysis of variance (ANOVA).
 
         Defaults to Welch's ANOVA for heteroskedastic samples. Delacre et al.
-        (2019) recommends routinely use of Welch's F-test for unequal variance
+        (2019) recommends routine use of Welch's F-test for unequal variance
         over Student's (Fisher's) method, rather than selective use of Welch's
         test. The loss in power from Welch's vs. Student's test in cases of
         equal variance is minimal, whereas the reduction in Type I error rate
-        from Welch's incases of unequal variance is substantial; a strong
+        from Welch's in cases of unequal variance is substantial; a strong
         determination of homoskedasticity is often not simple.
 
         Parameters
         ----------
-        equal_var : bool, optional
+        equal_var : bool, default False
             If True, assume equal variances (Fisher's ANOVA); otherwise, use
-            Welch's. Defaults to False.
+            Welch's.
 
         Returns
         -------
@@ -791,7 +853,7 @@ class MultiSeries1WayBGStats:
 
     def nonparametric_summ_stats(self,
                                  alpha_level: float = None) -> pd.DataFrame:
-        """Compute nonparametric summary statistics (quantiles, IQR).
+        r"""Compute nonparametric summary statistics (quantiles, IQR).
 
         Parameters
         ----------
@@ -801,7 +863,8 @@ class MultiSeries1WayBGStats:
         Returns
         -------
         pd.DataFrame
-            Summary statistics with quantiles and IQR.
+            Summary statistics with quantiles and IQR for each column in
+            ``data``.
         """
         if alpha_level is None:
             alpha_level = self.alpha
@@ -826,20 +889,12 @@ class MultiSeries1WayBGStats:
         return summ_stats
 
     def kruskal_wallis(self) -> pd.Series:
-        """Perform 1-way between-samples analysis of variance (ANOVA).
-
-        Defaults to Welch's ANOVA for heteroskedastic samples. Delacre et al.
-        (2019) recommends routinely use of Welch's F-test for unequal variance
-        over Student's (Fisher's) method, rather than selective use of Welch's
-        test. The loss in power from Welch's vs. Student's test in cases of
-        equal variance is minimal, whereas the reduction in Type I error rate
-        from Welch's incases of unequal variance is substantial; a strong
-        determination of homoskedasticity is often not simple.
+        r"""Perform 1-way between-groups Kruskal-Wallis test.
 
         Returns
         -------
         pd.Series
-            Test results including F-statistic, degrees of freedom, and p-value.
+            Test results including H-statistic, degrees of freedom, and p-value.
         """
         result = stats.kruskal(
             *[self.data[col].astype(float)
@@ -998,6 +1053,34 @@ class MultiSeries1WayBGStats:
     def pairwise_t(self,
                    equal_var: bool = False,
                    p_corr_method: PCorrectionMethod = 'holm') -> pd.DataFrame:
+        r"""Perform post hoc pairwise t-tests.
+
+        Uses pairwise combinations of input Series, and calculates t-test for
+        each pair. By default, uses Welch t-test rather than Student t-test (see
+        ``continuous.TwoSeriesStats.t_test()`` for rationale).
+
+        *p*-Values for all pairwise tests then undergo correction for multiple
+        comparisons. By default, Holm-Bonferroni correction is used, but all
+        correction methods supported by
+        `statsmodels.stats.multitest.multipletests()
+        <https://www.statsmodels.org/dev/generated/statsmodels.stats.multitest.multipletests.html>`_
+        are supported.
+
+        Parameters
+        ----------
+        equal_var : bool, default False
+            If False, use Welch t-test; otherwise, use Student t-test.
+        p_corr_method : str, default 'holm'
+            *p*-Value correction method. Cannot be None since *p*-value
+            correction is always indicated for multiple pairwise comparisons.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame with a ``pd.MultiIndex`` in ``(control, test)`` format.
+            Columns give *t*-statistic, Student DoF, calculated Welch DoF,
+            and uncorrected and corrected p-values.
+        """
         t_results: list[pd.Series] = []
 
         # Run t-test for each column pair
@@ -1032,6 +1115,34 @@ class MultiSeries1WayBGStats:
 
     def pairwise_mwu(self,
                      p_corr_method: PCorrectionMethod = 'holm') -> pd.DataFrame:
+        r"""Perform post hoc pairwise Mann-Whitney U-tests.
+
+        Uses pairwise combinations of input Series, and calculates Mann-Whitney
+        U-test for each pair.
+
+        *p*-Values for all pairwise tests then undergo correction for multiple
+        comparisons. By default, Holm-Bonferroni correction is used, but all
+        correction methods supported by
+        `statsmodels.stats.multitest.multipletests()
+        <https://www.statsmodels.org/dev/generated/statsmodels.stats.multitest.multipletests.html>`_
+        are supported.
+
+        Parameters
+        ----------
+        p_corr_method : str, default 'holm'
+            *p*-Value correction method. Cannot be None since *p*-value
+            correction is always indicated for multiple pairwise comparisons.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame with a ``pd.MultiIndex`` in ``(control, test)`` format.
+            Since *p*-value can reach significance even if medians are the same
+            between groups, ``'Ha'`` column denotes the direction of effect
+            when uncorrected *p* is significant.
+            Columns also give *U*-statistic, DoF, and uncorrected and corrected
+            *p*-values.
+        """
         mwu_results: list[pd.Series] = []
         mwu_ha_map: dict[str, str] = {
             '<': 'control > test',
@@ -1083,8 +1194,45 @@ class MultiSeries1WayBGStats:
         return mwu_results_df
 
 
-
 class MultiSample1WayBGStats(MultiSeries1WayBGStats):
+    r"""Compare continuous outcome across 3 groups defined by a categorical.
+
+    Extends ``MultiSeries1WayBGStats`` to split a continuous Series by a
+    categorical grouping variable.
+
+    Parameters
+    ----------
+    cat_x : pd.Series
+        Categorical variable defining groups. ``cat_x.dtype`` should be either
+        ``pd.Categorical``, or convertible to ``pd.Categorical``. Predefined
+        categorical ordering will be retained automatically.
+    num_y : pd.Series
+        Continuous outcome variable.
+    cat_order : list[str], optional
+        If no categorical ordering is predefined in ``cat_x``, but this is
+        desired in the output. Should be a list of strings of all unique values
+        that appear in ``cat_x``.
+    parametric : bool, default True
+        If True, use ANOVA; otherwise, use Kruskal-Wallus.
+    alpha_level : float, default 0.05
+        Significance level for tests and CIs.
+
+    Attributes
+    ----------
+    data : pd.DataFrame
+        Resulting DataFrame after removal of observations with nulls.
+    parametric : bool
+        Whether to use parametric or nonparametric methods.
+    alpha : float
+        Significance level.
+
+    See Also
+    --------
+    MultiSeries1WayBGStats :
+        Same tests, input style is simpler if data is formatted as separate
+        Series of numeric outcome data (for each group/level)  without a
+        categorical grouping column.
+    """
     def __init__(self,
                  cat_x: pd.Series,
                  num_y: pd.Series,
