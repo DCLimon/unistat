@@ -5,13 +5,18 @@ a contingency table with any number of IV & DV levels. BooleanContingencyStats
 inherits from MulticlassContingencyStats, and is a special case for a 2x2
 contingency table, also implementing Fisher's exact test.
 """
+from abc import ABC
 import warnings
 from typing import Optional, Literal
+import numpy as np
 import pandas as pd
 from scipy import stats
+from statsmodels.stats.multitest import multipletests
+from ._types import PCorrectionMethod
+from .exceptions import ExpectedFrequencyWarning
 
 
-class MulticlassContingencyStats:
+class ContingencyStats(ABC):
     r"""Compute contingency table stats with arbitrary number of IV & DV levels.
 
     Take 2 pandas Series representing row and column variables, compute a
@@ -78,17 +83,38 @@ class MulticlassContingencyStats:
         #   have `.table()` output intervention as rows, and outcome as cols.
         #   - If desired, you could implement a `transpose: bool = False` param
         #     in `.table()` if user really wants axes swapped.
-        self._df = (pd.concat([table_rows, table_cols], axis='columns')
-                    .dropna(axis='index'))
+        self._df = (
+            pd.concat([table_rows, table_cols], axis='columns')
+            .dropna(axis='index')
+        )
+
         self.idx_series = self._df[table_rows.name]
         self.col_series = self._df[table_cols.name]
-        self.row_title = row_title
-        self.row_names = row_names
-        self.col_title = col_title
-        self.col_names = col_names
 
-    def table(self, as_pct: bool = False,
-              axis: Literal[0, 1, 'rows', 'columns'] = 'rows') -> pd.DataFrame:
+        self.row_title = row_title or self.idx_series.name
+        self.col_title = col_title or self.col_series.name
+
+        # Done to ensure correct ordering
+        crosstab = self._crosstab
+        self.row_names = row_names or crosstab.index.tolist()[:-1]
+        self.col_names = col_names or crosstab.columns.tolist()[:-1]
+
+    @property
+    def _crosstab(self):
+        return pd.crosstab(
+            index=self.idx_series,
+            columns=self.col_series,
+            rownames=[self.row_title],
+            colnames=[self.col_title],
+            margins=True,
+            margins_name='Totals'
+        )
+
+    def get_table(
+        self,
+        as_pct: bool = False,
+        axis: Literal[0, 1, 'rows', 'columns'] = 'rows'
+    ) -> pd.DataFrame:
         r"""Compute the contingency table.
 
         Parameters
@@ -111,37 +137,15 @@ class MulticlassContingencyStats:
         ValueError
             If `as_pct` is True and `axis` is None.
         """
-        table = pd.crosstab(
-            index=self.idx_series,
-            columns=self.col_series,
-            rownames=[self.row_title],
-            colnames=[self.col_title],
-            margins=True,
-            margins_name='Totals'
+        table = self._crosstab.copy()
+        table.index = pd.Index(
+            data=self.row_names+['col_totals'],
+            name=self.row_title
         )
-
-        # Could probably clean this up by making them properties
-        if self.row_names is not None:
-            table.index = pd.Index(self.row_names + ['col_totals'])
-        else:
-            table.index = pd.Index([idx for idx in table.index[:-1]]
-                                    + ['col_totals'])
-
-        if self.row_title is not None:
-            table.index.name = self.row_title
-        else:
-            table.index.name = self.idx_series.name
-
-        if self.col_names is not None:
-            table.columns = pd.Index(self.col_names + ['row_totals'])
-        else:
-            table.columns = pd.Index([col for col in table.columns[:-1]]
-                                     + ['row_totals'])
-
-        if self.col_title is not None:
-            table.columns.name = self.col_title
-        else:
-            table.columns.name = self.col_series.name
+        table.columns = pd.Index(
+            data=self.col_names+['row_totals'],
+            name=self.col_title
+        )
 
         if as_pct:
             if (axis == 'rows') or (axis == 0):
@@ -158,6 +162,7 @@ class MulticlassContingencyStats:
 
         return table
 
+    @property
     def matrix(self):
         r"""Get the contingency matrix, without marginal totals.
 
@@ -166,7 +171,9 @@ class MulticlassContingencyStats:
         pd.DataFrame
             Contingency table excluding row and column totals.
         """
-        return self.table().drop(index='col_totals', columns='row_totals')
+        return (self.get_table()
+                .drop(index='col_totals')
+                .drop(columns='row_totals'))
 
     def chi2(self, correction: bool = False):
         r"""Perform Chi-squared test of independence.
@@ -184,7 +191,7 @@ class MulticlassContingencyStats:
 
         Warns
         -----
-        UserWarning
+        ExpectedFrequencyWarning
             If any expected frequencies are less than 5.
 
         Notes
@@ -205,41 +212,44 @@ class MulticlassContingencyStats:
         any significance in a non-2x2 chi-squared test is likely to be followed
         by pairwise 2x2 testing, which can utilize Fisher's test.
         """
-        test = stats.contingency.chi2_contingency(self.matrix(),
+        test = stats.contingency.chi2_contingency(self.matrix,
                                                   correction=correction)
-        exp_freq = (
-            (test.expected_freq < 5).sum()
-            / (test.expected_freq < 5).size
+
+        self._exp_freq = test.expected_freq
+        exp_freq_lt5 = (
+            (self._exp_freq < 5).sum()
+            / (self._exp_freq < 5).size
         )
-        if exp_freq > 0:
-            warnings.warn(f"Expected frequency < 5 in {exp_freq:.1%} of cells.")
+        if exp_freq_lt5 > 0:
+            ExpectedFrequencyWarning(
+                f'Expected frequency < 5 in {exp_freq_lt5:.1%} of cells.'
+            )
 
         return test
 
+    @property
+    def exp_freq(self):
+        r"""Cell-wise expected frequencies."""
+        if not(hasattr(self, '_exp_freq')):
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', ExpectedFrequencyWarning)
+                self.chi2()
+        return pd.DataFrame(
+            self._exp_freq,
+            index=self.matrix.index,
+            columns=self.matrix.columns
+        )
+
     def print_results(self):
         r"""Print contingency tables and Chi-squared results."""
-        # def line_length():
-        #     left_title_col = max(
-        #         len(self.row_title), len(self.col_title),
-        #         (
-        #             max(self.row_names, key=len) if self.row_names is not None
-        #             else 5
-        #         ),
-        #         (
-        #             max(self.co, key=len) if self.co is not None
-        #             else 5
-        #         ),
-        #
-        #     )
-
         chi2 = self.chi2()
 
         print(f'{self.row_title} vs. {self.col_title}\n', '='*40)
         print(f'Table (# Obs):\n'
-              f'{self.table()}')
+              f'{self.get_table()}')
         print(f'-'*40,
               f'\nTable (% of Totals):\n'
-              f'{self.table(as_pct=True)}')
+              f'{self.get_table(as_pct=True)}')
         print('-'*40,
               f'\nChi^2 ToI:\n'
               f'X^2({chi2.dof}) = {chi2.statistic:.3f}, '
@@ -247,7 +257,185 @@ class MulticlassContingencyStats:
         print('-'*40, '\n')
 
 
-class BooleanContingencyStats(MulticlassContingencyStats):
+class MulticlassContingencyStats(ContingencyStats):
+    def __init__(self,
+                 table_rows: pd.Series,
+                 table_cols: pd.Series,
+                 row_title: Optional[str] = None,
+                 row_names: Optional[list[str]] = None,
+                 col_title: Optional[str] = None,
+                 col_names: Optional[list[str]] = None):
+        super().__init__(table_rows, table_cols,
+                         row_title, row_names,
+                         col_title, col_names)
+
+    def _pairwise_post_hoc(self,
+                           alpha: float = 0.05,
+                           p_corr_method: PCorrectionMethod = 'holm'):
+        pairwise_results: list[pd.DataFrame] = []
+
+        if (len(self.matrix.index) > 2) and (len(self.matrix.columns) > 2):
+            raise ValueError('Cannot run pairwise post hoc tests when both IV '
+                             '& DV have 3+ levels.')
+        elif len(self.matrix.columns) == 2:
+            new_index = self.matrix.index.tolist()
+            old_index = self._crosstab.index.tolist()[:-1]
+
+            for new_idx, old_idx in zip(new_index, old_index):
+                pairwise_test = BooleanContingencyStats(
+                    table_rows=(self.idx_series == old_idx),
+                    row_title=new_idx,
+                    row_names=['False', 'True'],
+                    table_cols=self.col_series,
+                    col_title=self.col_title,
+                    col_names=self.col_names,
+                )
+                if (pairwise_test.exp_freq < 5).any(axis=None):
+                    pairwise_test_type = 'Fisher exact'
+                    pairwise_test_stat = np.nan
+                    pairwise_test_p = pairwise_test.fisher_exact()
+                else:
+                    chi_sq_result = pairwise_test.chi2()
+                    pairwise_test_type = f'X^2({chi_sq_result.dof:.0f})'
+                    pairwise_test_stat = chi_sq_result.statistic
+                    pairwise_test_p = chi_sq_result.pvalue
+
+                pairwise_result = pd.DataFrame(
+                    data={
+                        'test': pairwise_test_type,
+                        'test_stat': pairwise_test_stat,
+                        'p-value': pairwise_test_p,
+                    },
+                    index=[new_idx],
+                )
+                pairwise_results.append(pairwise_result)
+
+        elif len(self.matrix.index) == 2:
+            new_cols = self.matrix.columns.tolist()
+            old_cols = self._crosstab.columns.tolist()[:-1]
+
+            for new_col, old_col in zip(new_cols, old_cols):
+                pairwise_test = BooleanContingencyStats(
+                    table_rows=self.idx_series,
+                    row_title=self.row_title,
+                    row_names=self.row_names,
+                    table_cols=(self.col_series == old_col),
+                    col_title=new_col,
+                    col_names=['False', 'True'],
+                )
+                if (pairwise_test.exp_freq < 5).any(axis=None):
+                    pairwise_test_type = 'Fisher exact'
+                    pairwise_test_stat = np.nan
+                    pairwise_test_p = pairwise_test.fisher_exact()
+                else:
+                    chi_sq_result = pairwise_test.chi2()
+                    pairwise_test_type = f'X^2({chi_sq_result.dof:.0f})'
+                    pairwise_test_stat = chi_sq_result.statistic
+                    pairwise_test_p = chi_sq_result.pvalue
+
+                pairwise_result = pd.DataFrame(
+                    data={
+                        'test': pairwise_test_type,
+                        'test_stat': pairwise_test_stat,
+                        'p-value': pairwise_test_p,
+                    },
+                    index=[new_col],
+                )
+                pairwise_results.append(pairwise_result)
+
+        pairwise_df = pd.concat(pairwise_results, axis='rows')
+        pairwise_df['p_corr'] = multipletests(
+            pvals=pairwise_df['p-value'],
+            alpha=alpha,
+            method=p_corr_method,
+        )[1]
+
+        return pairwise_df
+
+
+    def _residuals_post_hoc(self,
+                            alpha: float = 0.05,
+                            p_corr_method: PCorrectionMethod = 'holm'):
+        observed = self.matrix
+        expected = self.exp_freq
+        # residuals = observed - expected
+        # std_residuals = (observed - expected)/np.sqrt(expected)
+        grand_sum = observed.sum().sum()
+
+        adj_std_residuals = (
+            (observed - expected)
+            / np.sqrt(
+                expected
+                .mul(
+                    1 - observed.sum(axis='columns').div(grand_sum),
+                    axis='rows'
+                )
+                .mul(
+                    1 - observed.sum(axis='rows').div(grand_sum),
+                    axis='columns'
+                )
+            )
+        )
+
+        # Z-score -> p-value
+        p_vals = adj_std_residuals.abs().map(stats.norm.sf).mul(2)
+        rows, cols = p_vals.shape
+
+        if rows > 2 and cols > 2:
+            p_to_correct = p_vals.to_numpy().ravel()
+        elif cols == 2:
+            p_to_correct = p_vals.iloc[:, -1].to_numpy()
+        elif rows == 2:
+            p_to_correct = p_vals.iloc[-1, :].to_numpy()
+        else:
+            raise ValueError("Unsupported shape: must be >2×>2, k×2, or 2×k")
+
+        _, p_corr_vec, _, _ = multipletests(
+            p_to_correct,
+            alpha=alpha,
+            method=p_corr_method
+        )
+
+        if rows > 2 and cols > 2:
+            p_corr_array = p_corr_vec.reshape((rows, cols))
+        elif cols == 2:
+            p_corr_array = np.column_stack([p_corr_vec, p_corr_vec])
+        else:  # rows == 2
+            p_corr_array = np.vstack([p_corr_vec, p_corr_vec])
+
+        p_corr = pd.DataFrame(
+            p_corr_array,
+            index=p_vals.index,
+            columns=p_vals.columns
+        )
+
+        return adj_std_residuals, p_vals, p_corr
+
+    def print_results(self):
+        r"""Print contingency tables and Chi-squared results."""
+        chi2 = self.chi2()
+
+        print(f'{self.row_title} vs. {self.col_title}\n', '='*40)
+        print(f'Table (# Obs):\n'
+              f'{self.get_table()}')
+        print(f'-'*40,
+              f'\nTable (% of Totals):\n'
+              f'{self.get_table(as_pct=True)}')
+        print('-'*40,
+              f'\nChi^2 ToI:\n'
+              f'X^2({chi2.dof}) = {chi2.statistic:.3f}, '
+              f'p = {chi2.pvalue:.4f}')
+        print('-'*40, '\n')
+
+        if chi2.pvalue <= 0.05:
+            if (len(self.matrix.index) > 2) and (len(self.matrix.columns) > 2):
+                for table in self._residuals_post_hoc():
+                    print(table.to_string())
+            else:
+                print(self._pairwise_post_hoc().to_string())
+
+
+class BooleanContingencyStats(ContingencyStats):
     r"""Perform contingency statistics on boolean (2x2) tables.
 
     Extends MulticlassContingencyStats with methods specific to 2x2 tables,
@@ -276,7 +464,7 @@ class BooleanContingencyStats(MulticlassContingencyStats):
 
     Warns
     -----
-    UserWarning
+    ExpectedFrequencyWarning
         If any cell-wise expected frequencies < 5
 
     See Also
@@ -377,7 +565,7 @@ class BooleanContingencyStats(MulticlassContingencyStats):
         scipy.stats._result_classes.OddsRatioResult
             Result object with statistic and confidence interval.
         """
-        odds_ratio = stats.contingency.odds_ratio(self.matrix(), kind=kind)
+        odds_ratio = stats.contingency.odds_ratio(self.matrix, kind=kind)
         return odds_ratio
 
     def fisher_exact(self, alternative='two-sided'):
@@ -394,7 +582,7 @@ class BooleanContingencyStats(MulticlassContingencyStats):
             p-value of the test.
         """
         p_val = (
-            stats.fisher_exact(self.matrix(), alternative=alternative).pvalue
+            stats.fisher_exact(self.matrix, alternative=alternative).pvalue
         )
         return p_val
 
@@ -407,10 +595,10 @@ class BooleanContingencyStats(MulticlassContingencyStats):
 
         print(f'{self.row_title} vs. {self.col_title}\n', '='*40)
         print(f'Table (# Obs):\n'
-              f'{self.table()}')
+              f'{self.get_table()}')
         print(f'-'*40,
               f'\nTable (% of Totals):\n'
-              f'{self.table(as_pct=True)}')
+              f'{self.get_table(as_pct=True)}')
         print('-'*40,
               f'\nOdds Ratio:\n'
               f'OR = {self.odds_ratio().statistic:.4f}, '

@@ -7,11 +7,11 @@ import warnings
 ################################################################################
 
 class UnistatError(Exception):
-    """Base class for all Unistat exceptions."""
+    r"""Base class for all Unistat exceptions."""
 
 
 class SeriesNameCollisionError(UnistatError, ValueError):
-    """Raised when 2 Series share names, and no error-handling implemented.
+    r"""Raised when 2 Series share names, and no error-handling implemented.
 
     If error-handling has been implemented to avoid crashes (e.g. Series are
     renamed to deconflict) use SeriesNameCollisionWarning instead.
@@ -34,7 +34,7 @@ class SeriesNameCollisionError(UnistatError, ValueError):
 ################################################################################
 
 class UnistatWarning(UserWarning):
-    """Base class for all Unistat warnings."""
+    r"""Base class for all Unistat warnings."""
 
 
 class ExperimentalWarning(UnistatWarning):
@@ -79,13 +79,22 @@ class ExperimentalWarning(UnistatWarning):
 
 
 class SeriesNameCollisionWarning(UnistatWarning):
-    """Emitted when 2 Series share names, but error-handling implemented.
+    r"""Emitted when 2 Series share names, but error-handling implemented.
 
     If no error-handling exists, use SeriesNameCollisionError instead..
     """
     def __init__(self, message: str | None = None) -> None:
         default = 'Series shared same names; names were deconflicted.'
-        msg = message or default
+        msg = message if message is not None else default
+        super().__init__(msg)
+
+
+class ExpectedFrequencyWarning(UnistatWarning):
+    r"""Emitted when chi-squared cell-wise expected frequencies are too low."""
+    def __init__(self, message: str | None = None) -> None:
+        default = ('Cell-wise expected frequencies may be low; check to ensure '
+                   'expected frequencies allowable for statistical tests.')
+        msg = message if message is not None else default
         super().__init__(msg)
 
 
@@ -94,7 +103,7 @@ class SeriesNameCollisionWarning(UnistatWarning):
 def warn_experimental(feature: str | type,
                       message: str | None = None, *,
                       stacklevel: int = 2) -> None:
-    """Convenience helper to emit an ExperimentalWarning with a correct stacklevel.
+    r"""Convenience helper to emit an ExperimentalWarning with a correct stacklevel.
 
     Example
     -------
