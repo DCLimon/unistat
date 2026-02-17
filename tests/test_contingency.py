@@ -8,11 +8,6 @@ import pandas as pd
 from tests.test_project.dataprep import get_outcome_df
 from unistat import MulticlassContingencyStats, BooleanContingencyStats
 
-# Module Options ===============================================================
-
-pd.set_option('future.no_silent_downcasting', True)
-pd.set_option('mode.copy_on_write', 'warn')
-
 
 # Data Formatting ==============================================================
 
@@ -37,7 +32,7 @@ def two_by_two() -> BooleanContingencyStats:
 
 
 def print_boolean_tests() -> None:
-    two_by_two().print_results()
+    print(two_by_two())
 
 
 # Many x 2 =====================================================================
@@ -92,15 +87,15 @@ def four_by_four() -> MulticlassContingencyStats:
 
 
 def print_multiclass_tests() -> None:
-    four_by_two().print_results()
-    for table in four_by_two()._residuals_post_hoc():
+    print(four_by_two())
+    for table in four_by_two().residuals_post_hoc():
         print(table.to_string(), sep='\n')
 
-    two_by_four().print_results()
-    for table in two_by_four()._residuals_post_hoc():
+    print(two_by_four())
+    for table in two_by_four().residuals_post_hoc():
         print(table.to_string(), sep='\n')
 
-    four_by_four().print_results()
+    print(four_by_four())
 
 
 ################################################################################
