@@ -4,14 +4,12 @@
 ################################################################################
 
 import pathlib
-import polars as pl
+import numpy as np
 import pandas as pd
+import polars as pl
 
 
 # Module Options ===============================================================
-
-pd.set_option('future.no_silent_downcasting', True)
-pd.set_option('mode.copy_on_write', 'warn')
 
 working_parquet_path = r'tests\data\test_data_wb_calcium.parquet'
 
@@ -259,10 +257,38 @@ class IRLData:
 
         return self.df
 
+    def fake_testing_cols(self) -> pl.DataFrame:
+        r"""Fake data columns for testing purposes. Have no real value."""
+
+        self.df = self.df.with_row_index('fake_id_factor')
+
+        self.df = self.df.with_columns(
+            pl.Series(
+                'fake_cluster_factor',
+                np.random.randint(1, 8, size=len(self.df)),
+                dtype=pl.Int32
+            ).replace_strict(
+                {
+                    0: 'a',
+                    1: 'b',
+                    2: 'c',
+                    3: 'd',
+                    4: 'e',
+                    5: 'f',
+                    6: 'g',
+                    7: 'h',
+                },
+                default=None
+            ).cast(pl.Categorical)
+        )
+
+        return self.df
+
     def make_df(self) -> pl.DataFrame:
         self.import_parquet()
         self.clean_df()
         self.synthesize_cols()
+        self.fake_testing_cols()
         return self.df
 
     def polars(self) -> pl.DataFrame:

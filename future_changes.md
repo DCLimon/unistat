@@ -66,6 +66,13 @@ See if there's some sort of modified VIF that gets used with Logit or in
 other cases. I vaguely remember this coming up when calculating some regression 
 in R for the Retro HypoCa stats.
 
+### Add feature selection support
+
+* backward feature elimination
+* augmented backward feature elimination
+* stepwise feature selection
+* +/- forward selection
+
 ### Consider beginning to deprecate `RegressionStats`?
 
 * Maybe `FormulaRegression` is useful enough
