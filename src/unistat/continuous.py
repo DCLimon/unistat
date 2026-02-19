@@ -1,4 +1,4 @@
-"""Module for statistical analysis of continuous data.
+r"""Module for statistical analysis of continuous data.
 
 This module provides classes for analyzing relationships between two continuous
 or categorical series, including correlation tests, two-sample comparisons, and
@@ -24,22 +24,33 @@ TwoSampleStats
     Class for two-sample comparisons with a boolean grouping variable.
 ControlTestStats
     Named tuple for storing confidence intervals of control and test groups.
+MultiSeries1WayBGStats
+    Class for 1-way between-group statistical comparisons cross 3+ levels.
+MultiSample1WayBGStats
+    MultiSeries1WayBGStats
+    Class for 1-way between-group comparisons with a categorical
+    grouping variable (3+ levels).
 
 Notes
 -----
 Assumes input series are appropriately typed (e.g., continuous for numerical
-tests, boolean for grouping). Handles missing data by dropping NaNs.
+tests, boolean/categorical for grouping). Handles missing data by dropping NaNs.
 """
+import warnings
 from typing import Literal
 from collections import namedtuple
+from itertools import combinations
 import numpy as np
 import pandas as pd
+from pandas.api.types import CategoricalDtype, is_categorical_dtype
 from scipy import stats
+from statsmodels.stats.multitest import multipletests
 from .exceptions import SeriesNameCollisionError, SeriesNameCollisionWarning
+from ._types import PCorrectionMethod
 
 
 class CorrStats:
-    """Class for computing correlation statistics between two continuous series.
+    r"""Compute correlation statistics between two continuous series.
 
     Supports Pearson (parametric) or Spearman (nonparametric) correlation.
 
@@ -143,7 +154,7 @@ class CorrStats:
 
 
 class TwoSeriesStats:
-    """Compare 2 continuous series using parametric or nonparametric tests.
+    r"""Compare 2 continuous series using parametric or nonparametric tests.
 
     Supports asymptotic t-tests (parametric) or Mann-Whitney U-tests
     (nonparametric).
@@ -189,7 +200,7 @@ class TwoSeriesStats:
             SeriesNameCollisionWarning('`test` and `control` have '
                                        'the same column name.')
             test = test.rename(f'{test.name}_TEST')
-            control = control.rename(f'{test.name}_CTRL')
+            control = control.rename(f'{control.name}_CTRL')
         self.test = test.dropna().reset_index(drop=True)
         self.control = control.dropna().reset_index(drop=True)
         self.parametric = parametric
@@ -370,8 +381,8 @@ class TwoSeriesStats:
         output = pd.Series(
             {
                 't-statistic': result.statistic,
-                'welch_df': result.df,
-                'student_df': (
+                'welch_dof': result.df,
+                'student_dof': (
                     (self.test.count() - 1) + (self.control.count() - 1)
                 ),
                 'p-value': result.pvalue,
@@ -463,9 +474,10 @@ class TwoSeriesStats:
 
 
 class TwoSampleStats(TwoSeriesStats):
-    """Class for comparing a continuous outcome across two groups defined by a boolean variable.
+    r"""Compare continuous outcome across 2 groups defined by a boolean variable.
 
-    Extends TwoSeriesStats to split a continuous series by a boolean grouping variable.
+    Extends TwoSeriesStats to split a continuous series by a boolean grouping
+    variable.
 
     Parameters
     ----------
@@ -576,3 +588,700 @@ class TwoSampleStats(TwoSeriesStats):
 
 ControlTestStats = namedtuple('ControlTestStats',
                               ['control', 'test'])
+
+
+class MultiSeries1WayBGStats:
+    r"""Compare 3+ continuous series using parametric or nonparametric tests.
+
+    Class is intended for data formatted as 3+ ``pd.Series`` objects, with a
+    Series of continuous dependent variable (DV) data for each level of the
+    categorical independent variable (IV). This is commonly encountered when
+    there are separate DataFrames for each group/category, each of which has
+    a column for the same numeric outcome.
+
+    Supports asymptotic analysis of variance (Welch ANOVA) tests (parametric),
+    or Kruskal-Wallis tests (nonparametric).
+
+    Also implements post hoc testing with automatic *p*-value correction for
+    multiple comparisons (Holm-Bonferroni method by default).
+    * parametric post hoc tests via pairwise Welch t-tests.
+    * nonparametric post hoc tests via pairwise Mann-Whitney U-tests.
+
+    Parameters
+    ----------
+    *data : pd.Series | pd.DataFrame
+        Series of outcome data is passed for each category/level. Series will be
+        converted to DataFrame columns in the order they are passed. If present,
+        Series names will be appended with an index value (``__0``, ``__1``,
+        etc.); unnamed Series will be named with their equivalent integer index.
+        A **single** DataFrame can also be passed as an argument, in which case
+        column names will be used as Series names.
+    parametric : bool, default True
+        If True, use ANOVA; otherwise, Kruskal-Wallis.
+    alpha_level : float, default 0.05
+        Significance level for confidence intervals and tests.
+    **named_data : pd.Series | pd.DataFrame
+        Keyword arguments may be used to override automatic, index-based
+        Series names (e.g., ``new_name1=series1, new_name2=series2``, etc.).
+        ``data`` Is a protected keyword, reserved for passing a single DataFrame
+        as ``data=df``.
+
+    Attributes
+    ----------
+    data : pd.DataFrame
+        All passed Series, concatenated as columns, with reassigned unique
+        column names.
+    parametric : bool
+        Whether to use parametric or nonparametric methods.
+    alpha : float
+        Significance level.
+
+    See Also
+    --------
+    MultiSample1WayBGStats :
+        Same tests, starting from a categorical grouping column (x) and a
+        numeric outcome column (y). Useful when all data is derived from a
+        single DataFrame.
+
+    Notes
+    -----
+    Series may be passed **either** as positional arguments (``*data``)**, or as
+    named keyword arguments (``**named_data``), **but not both**. If all Series
+    are contained as a single DataFrame, the DataFrame may be passed either
+    as a ``data=df`` keyword argument (preferred for clarity), or as the lone
+    ``*data`` argument. For this reason, ``data`` is a protected name for
+    ``**named_data`` keyword arguments.
+    """
+    def __init__(self,
+                 *data: pd.Series | pd.DataFrame,
+                 parametric: bool = True,
+                 alpha_level: float = .05,
+                 **named_data: pd.Series | pd.DataFrame):
+        self._input_data: tuple = data
+        self._input_named_data: dict = named_data
+        self._series_list: list[pd.Series] = self._parse_input_data()
+        self._check_duplicate_series_name()  # Error checking, no returns
+
+        self._series_list = [series.dropna().reset_index(drop=True)
+                             for series in self._series_list]
+
+        self.parametric: bool = parametric
+        self.alpha: float = alpha_level
+
+    @property
+    def data(self) -> pd.DataFrame:
+        return pd.concat(
+            objs=self._series_list,
+            axis='columns',
+        )
+
+    def __str__(self):
+        with pd.option_context('display.max_colwidth', None,
+                               'max_colwidth', None,
+                               'display.width', 256):
+            if self.parametric:
+                output_str = (
+                    f'{self.parametric_summ_stats().to_string()}\n'
+                    f'{self.anova().to_string()}'
+                )
+                if self._omnibus_sig:
+                    output_str += f'\n{self.pairwise_t().to_string()}'
+            else:
+                output_str = (
+                    f'{self.nonparametric_summ_stats().to_string()}\n'
+                    f'{self.kruskal_wallis().to_string()}'
+                )
+                if self._omnibus_sig:
+                    output_str += f'\n{self.pairwise_mwu().to_string()}'
+
+            return output_str
+
+    def conf_int(self,
+                 pct_ci: float = None,
+                 dist: Literal['t', 'normal', 'z'] = 't') -> pd.DataFrame:
+        """Calculate CI of mean of all columns in `data`, based on SEM.
+
+        `pct_ci` can be used to custom-define a CI width. By default, 1 - alpha
+        is used, as set in the TwoSeriesStats object.
+
+        Parameters
+        ----------
+        pct_ci : float, optional
+            Confidence level (e.g., 0.95 for 95%). Defaults to 1 - alpha.
+        dist: {'t', 'normal'}, optional
+            Parent distribution to use when calculating SEM. Defaults to 't'.
+
+        Returns
+        -------
+        pd.DataFrame
+            Column names match `data.columns`; `index=['ci_lower', 'ci_upper']`.
+
+        Notes
+        -----
+
+        SEM is always calculated using sample SD (1 DoF). CI can be calculated
+        using either the normal (Z) distribution or Student's t-distribution;
+        the latter will give slightly wider CI, all else being equal.
+
+        For small N, Gurland & Trepathi (1971) report that CI is too narrow by
+        25% for N=2, and ~5% for N=6, and provide an equation for calculating CI
+        underestimation. Sokal & Rohlf (1981) give a formula for a correction
+        factor to calculate unbiased CI for N < 20, which is not implemented
+        in this method.
+
+        For N > 100, Student's t-distribution and Gaussian normal distribution
+        are approximately equivalent. Nonetheless, t-distribution is the default
+        form used here.
+
+        Rather than considering correction factors, our recommendation for small
+        N, or to define CI about a measure of central tendency other than the
+        sample mean, is to use a bootstrapped CI, as implemented in the
+        ``resampling`` module. However, a bootstrapping class has not yet
+        been implemented for multiclass (3+ level) cases.
+        """
+        if pct_ci is None:
+            pct_ci = 1 - self.alpha
+
+        res_dict = {}
+        if dist == 't':
+            for col in self.data.columns:
+                res_dict[col] = stats.t.interval(
+                    pct_ci,
+                    df=self.data[col].count() - 1,
+                    loc=self.data[col].mean(),
+                    scale=(
+                        self.data[col].std(ddof=1)
+                        / np.sqrt(self.data[col].count())
+                    )
+                )
+
+        elif dist in ('normal', 'z'):
+            for col in self.data.columns:
+                res_dict[col] = stats.norm.interval(
+                    pct_ci,
+                    loc=self.data[col].mean(),
+                    scale=(
+                        self.data[col].std(ddof=1)
+                        / np.sqrt(self.data[col].count())
+                    )
+                )
+
+        else:
+            raise ValueError("`dist` can be: {'t', 'normal', 'z'}.")
+
+        return pd.DataFrame(data=res_dict, index=['ci_lower', 'ci_upper'])
+
+    def parametric_summ_stats(self, alpha_level: float = None) -> pd.DataFrame:
+        r"""Compute parametric summary statistics (mean, std, CI, etc.).
+
+        Parameters
+        ----------
+        alpha_level : float, optional
+            Significance level for CI. Defaults to self.alpha.
+
+        Returns
+        -------
+        pd.DataFrame
+            Summary statistics for each column in ``data``.
+        """
+        if alpha_level is None:
+            alpha_level = self.alpha
+
+        ci_res: pd.DataFrame = self.conf_int(1 - alpha_level)
+
+        summ_stats = pd.DataFrame(
+            data={
+                col: {
+                    'n': self.data[col].count(),
+                    'mean': self.data[col].mean(),
+                    'std': self.data[col].std(),
+                    'min': self.data[col].min(),
+                    'max': self.data[col].max(),
+                    f'{100 * (1 - alpha_level):.0f}%_CI_lower': (
+                        ci_res.at['ci_lower', col]
+                    ),
+                    f'{100 * (1 - alpha_level):.0f}%_CI_upper': (
+                        ci_res.at['ci_upper', col]
+                    ),
+                } for col in self.data.columns.tolist()
+            },
+        ).astype('Float64')
+
+        return summ_stats
+
+    def anova(self, equal_var: bool = False) -> pd.Series:
+        r"""Perform 1-way between-groups analysis of variance (ANOVA).
+
+        Defaults to Welch's ANOVA for heteroskedastic samples. Delacre et al.
+        (2019) recommends routine use of Welch's F-test for unequal variance
+        over Student's (Fisher's) method, rather than selective use of Welch's
+        test. The loss in power from Welch's vs. Student's test in cases of
+        equal variance is minimal, whereas the reduction in Type I error rate
+        from Welch's in cases of unequal variance is substantial; a strong
+        determination of homoskedasticity is often not simple.
+
+        Parameters
+        ----------
+        equal_var : bool, default False
+            If True, assume equal variances (Fisher's ANOVA); otherwise, use
+            Welch's.
+
+        Returns
+        -------
+        pd.Series
+            Test results including F-statistic, degrees of freedom, and p-value.
+        """
+        result = stats.f_oneway(
+            *[self.data[col].astype(float)
+              for col in self.data.columns],
+            equal_var=equal_var,
+            nan_policy='omit',
+            axis=0
+        )
+
+        output = pd.Series(
+            {
+                'F-statistic': result.statistic,
+                'dof_B': self.data.shape[1] - 1,
+                'dof_E': self.data.shape[0] - self.data.shape[1],
+                'dof_T': self.data.shape[0] - 1,
+                'p-value': result.pvalue,
+            }
+        ).astype('Float64')
+
+        return output
+
+    def nonparametric_summ_stats(self,
+                                 alpha_level: float = None) -> pd.DataFrame:
+        r"""Compute nonparametric summary statistics (quantiles, IQR).
+
+        Parameters
+        ----------
+        alpha_level : float, optional
+            Significance level for hypothesis direction. Defaults to self.alpha.
+
+        Returns
+        -------
+        pd.DataFrame
+            Summary statistics with quantiles and IQR for each column in
+            ``data``.
+        """
+        if alpha_level is None:
+            alpha_level = self.alpha
+
+        quantiles = [0, 0.25, 0.5, 0.75, 1]
+
+        summ_stats = pd.DataFrame(
+            data={
+                col: {
+                    'n': self.data[col].count(),
+                    'min': self.data[col].quantile(quantiles).loc[0],
+                    'q1': self.data[col].quantile(quantiles).loc[0.25],
+                    'median': self.data[col].quantile(quantiles).loc[0.5],
+                    'q3': self.data[col].quantile(quantiles).loc[0.75],
+                    'max': self.data[col].quantile(quantiles).loc[1],
+                    'iqr': (self.data[col].quantile(quantiles).loc[0.75]
+                            - self.data[col].quantile(quantiles).loc[0.25]),
+                } for col in self.data.columns.tolist()
+            },
+        ).astype('Float64')
+
+        return summ_stats
+
+    def kruskal_wallis(self) -> pd.Series:
+        r"""Perform 1-way between-groups Kruskal-Wallis test.
+
+        Returns
+        -------
+        pd.Series
+            Test results including H-statistic, degrees of freedom, and p-value.
+        """
+        result = stats.kruskal(
+            *[self.data[col].astype(float)
+              for col in self.data.columns],
+            nan_policy='omit',
+            axis=0,
+        )
+
+        output = pd.Series(
+            {
+                'H-statistic': result.statistic,
+                'dof': self.data.shape[1] - 1,
+                'p-value': result.pvalue,
+            }
+        ).astype('Float64')
+
+        return output
+
+    def _parse_input_data(self) -> list[pd.Series]:
+        output_list: list[pd.Series] = []
+
+        def parse_input_df(input_df: pd.DataFrame) -> list[pd.Series]:
+            df_list: list[pd.Series] = []
+            # Ensure at least 2 columns, then assign columns to series_list
+            if input_df.shape[1] >= 2:
+                for col in input_df.columns:
+                    df_list.append(input_df[col])
+                return df_list
+
+            else:
+                raise ValueError(
+                    'If passing a single DataFrame as a positional `data` '
+                    'arg or `data=df`kwarg, the DataFrame must have at '
+                    'least 2 columns.'
+                )
+
+        # Ensure exactly 1 paradigm used
+        if self._input_data and self._input_named_data:
+            raise ValueError('Cannot pass both `data` & `named_data`.')
+
+        # If passing `data` as a kwarg: `data=pd.DataFrame()`
+        elif 'data' in self._input_named_data:
+            df: pd.DataFrame = self._input_named_data['data']
+
+            # Multiple named_data
+            if len(self._input_named_data) > 1:
+                ValueError(
+                    'When using `data=df` argument to pass a DataFrame, '
+                    '`*data` positional args must be omitted, and '
+                    'no extra `**named_data` kwargs are permitted.'
+                )
+            elif isinstance(df, pd.DataFrame):
+                output_list = parse_input_df(df)
+            elif isinstance(df, pd.Series):
+                raise ValueError('Pass Series data via `*data` positional '
+                                 'args or via `**named_data` kwargs.')
+            else:
+                raise ValueError('`data=` must be pd.DataFrame or pd.Series.')
+
+        # If passing a single DataFrame to `data` as arg
+        elif (
+                # pd.DataFrame arg
+                (len(self._input_data) == 1)
+                and isinstance(self._input_data[0], pd.DataFrame)
+        ):
+            output_list = parse_input_df(self._input_data[0])
+
+        # If using `data` args
+        elif self._input_data:
+            # Ensure at least 2 args
+            if len(self._input_data) >= 2:
+                for enum, series in enumerate(self._input_data):
+                    # If `data` includes a DataFrame, ensure it only has 1 col
+                    if isinstance(series, pd.DataFrame):
+                        if series.shape[1] == 1:
+                            series = series.iloc[:, 0]
+                        else:
+                            raise ValueError(
+                                'When passing multiple args to `data`, '
+                                'args must be pd.Series or single-column '
+                                'pd.DataFrame.'
+                            )
+
+                    # Assign name/number to each series
+                    if hasattr(series, 'name'):
+                        series.name += f'__{enum}'
+                    else:
+                        series.name = enum
+                    output_list.append(series)
+
+            else:
+                raise ValueError('When passing individual Series args to '
+                                 '`data`, at least 2 args must be passed.')
+
+        # If using `named_data` kwargs
+        elif self._input_named_data:
+            # Ensure at least 2 kwargs
+            if len(self._input_named_data) >= 2:
+                for name, series in self._input_named_data.items():
+                    # If `data` includes a DataFrame, ensure only has 1 col
+                    if isinstance(series, pd.DataFrame):
+                        if series.shape[1] == 1:
+                            series = series.iloc[:, 0]
+                        else:
+                            raise ValueError(
+                                'When passing multiple kwargs to '
+                                '`named_data`, args must be a Series or '
+                                'single-column DataFrame.'
+                            )
+
+                    series.name = name
+                    output_list.append(series)
+            else:
+                raise ValueError('When using `named_data`, at least 2 '
+                                 'kwargs must be passed.')
+
+        # If `data` & `named_data` left blank
+        else:
+            raise ValueError('Must pass either `data` or `named_data`.')
+
+        return output_list
+
+    def _check_duplicate_series_name(self) -> None:
+        series_names: list[str] = [series.name for series in self._series_list]
+
+        # Set will be shorter than list if & only if duplicate column names
+        if len(set(series_names)) < len(series_names):
+
+            duplicates = series_names.copy()
+            for name in set(series_names):
+                duplicates.remove(name)
+            duplicates = str(set(duplicates))[1:-1]  # Remove {} wrapper
+
+            raise SeriesNameCollisionError(
+                '`data` cannot have duplicate column names.\n'
+                f'Duplicates: {duplicates}'
+            )
+
+    @property
+    def _omnibus_sig(self) -> bool:
+        if self.parametric:
+            p = self.anova()['p-value']
+        else:
+            p = self.kruskal_wallis()['p-value']
+
+        if p <= self.alpha:
+            return True
+        else:
+            return False
+
+    @property
+    def _pairwise_columns(self) -> list[tuple[str, str]]:
+        col_names: list[str] = self.data.columns.tolist()
+        return list(combinations(col_names, 2))
+
+    def pairwise_t(self,
+                   equal_var: bool = False,
+                   p_corr_method: PCorrectionMethod = 'holm') -> pd.DataFrame:
+        r"""Perform post hoc pairwise t-tests.
+
+        Uses pairwise combinations of input Series, and calculates t-test for
+        each pair. By default, uses Welch t-test rather than Student t-test (see
+        ``continuous.TwoSeriesStats.t_test()`` for rationale).
+
+        *p*-Values for all pairwise tests then undergo correction for multiple
+        comparisons. By default, Holm-Bonferroni correction is used, but all
+        correction methods supported by
+        `statsmodels.stats.multitest.multipletests()
+        <https://www.statsmodels.org/dev/generated/statsmodels.stats.multitest.multipletests.html>`_
+        are supported.
+
+        Parameters
+        ----------
+        equal_var : bool, default False
+            If False, use Welch t-test; otherwise, use Student t-test.
+        p_corr_method : str, default 'holm'
+            *p*-Value correction method. Cannot be None since *p*-value
+            correction is always indicated for multiple pairwise comparisons.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame with a ``pd.MultiIndex`` in ``(control, test)`` format.
+            Columns give *t*-statistic, Student DoF, calculated Welch DoF,
+            and uncorrected and corrected p-values.
+        """
+        t_results: list[pd.Series] = []
+
+        # Run t-test for each column pair
+        for col_pair in self._pairwise_columns:
+            t_obj = TwoSeriesStats(
+                control=self.data[col_pair[0]],
+                test=self.data[col_pair[1]],
+                alpha_level=self.alpha,
+                parametric=True
+            )
+            # Add columns for control/test names
+            t_result: pd.Series = t_obj.t_test()
+            t_results.append(t_result)
+
+        t_results_df: pd.DataFrame = pd.concat(
+            objs=t_results,
+            axis='columns',
+        ).T
+        t_results_df.index = pd.MultiIndex.from_tuples(
+            self._pairwise_columns,
+            names=['control', 'test'],
+        )
+
+        # Add column of corrected p-values
+        t_results_df['p_corr'] = multipletests(
+            pvals=t_results_df['p-value'],
+            alpha=self.alpha,
+            method=p_corr_method,
+        )[1]
+
+        return t_results_df
+
+    def pairwise_mwu(self,
+                     p_corr_method: PCorrectionMethod = 'holm') -> pd.DataFrame:
+        r"""Perform post hoc pairwise Mann-Whitney U-tests.
+
+        Uses pairwise combinations of input Series, and calculates Mann-Whitney
+        U-test for each pair.
+
+        *p*-Values for all pairwise tests then undergo correction for multiple
+        comparisons. By default, Holm-Bonferroni correction is used, but all
+        correction methods supported by
+        `statsmodels.stats.multitest.multipletests()
+        <https://www.statsmodels.org/dev/generated/statsmodels.stats.multitest.multipletests.html>`_
+        are supported.
+
+        Parameters
+        ----------
+        p_corr_method : str, default 'holm'
+            *p*-Value correction method. Cannot be None since *p*-value
+            correction is always indicated for multiple pairwise comparisons.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame with a ``pd.MultiIndex`` in ``(control, test)`` format.
+            Since *p*-value can reach significance even if medians are the same
+            between groups, ``'Ha'`` column denotes the direction of effect
+            when uncorrected *p* is significant.
+            Columns also give *U*-statistic, DoF, and uncorrected and corrected
+            *p*-values.
+        """
+        mwu_results: list[pd.Series] = []
+        mwu_ha_map: dict[str, str] = {
+            '<': 'control > test',
+            '>': 'control < test',
+            '!=': 'control != test',
+            '=': 'control = test',
+        }
+
+        # Run t-test for each column pair
+        for col_pair in self._pairwise_columns:
+            mwu_obj = TwoSeriesStats(
+                control=self.data[col_pair[0]],
+                test=self.data[col_pair[1]],
+                alpha_level=self.alpha,
+                parametric=False
+            )
+
+            # Add column to show direction of effect
+            mwu_ha: str = mwu_ha_map[
+                mwu_obj.nonparametric_summ_stats().at['n', 'Ha']
+            ]
+            mwu_result: pd.Series = mwu_obj.mwu_test()
+            mwu_result = pd.concat(
+                objs=[
+                    pd.Series({'Ha': mwu_ha}),
+                    mwu_result,
+                ],
+                axis='rows',
+            )
+
+            mwu_results.append(mwu_result)
+
+        mwu_results_df: pd.DataFrame = pd.concat(
+            objs=mwu_results,
+            axis='columns',
+        ).T
+        mwu_results_df.index = pd.MultiIndex.from_tuples(
+            self._pairwise_columns,
+            names=['control', 'test'],
+        )
+
+        # Add column of corrected p-values
+        mwu_results_df['p_corr'] = multipletests(
+            pvals=mwu_results_df['p-value'],
+            alpha=self.alpha,
+            method=p_corr_method,
+        )[1]
+
+        return mwu_results_df
+
+
+class MultiSample1WayBGStats(MultiSeries1WayBGStats):
+    r"""Compare continuous outcome across 3 groups defined by a categorical.
+
+    Extends ``MultiSeries1WayBGStats`` to split a continuous Series by a
+    categorical grouping variable.
+
+    Parameters
+    ----------
+    cat_x : pd.Series
+        Categorical variable defining groups. ``cat_x.dtype`` should be either
+        ``pd.Categorical``, or convertible to ``pd.Categorical``. Predefined
+        categorical ordering will be retained automatically.
+    num_y : pd.Series
+        Continuous outcome variable.
+    cat_order : list[str], optional
+        If no categorical ordering is predefined in ``cat_x``, but this is
+        desired in the output. Should be a list of strings of all unique values
+        that appear in ``cat_x``.
+    parametric : bool, default True
+        If True, use ANOVA; otherwise, use Kruskal-Wallus.
+    alpha_level : float, default 0.05
+        Significance level for tests and CIs.
+
+    Attributes
+    ----------
+    data : pd.DataFrame
+        Resulting DataFrame after removal of observations with nulls.
+    parametric : bool
+        Whether to use parametric or nonparametric methods.
+    alpha : float
+        Significance level.
+
+    See Also
+    --------
+    MultiSeries1WayBGStats :
+        Same tests, input style is simpler if data is formatted as separate
+        Series of numeric outcome data (for each group/level)  without a
+        categorical grouping column.
+    """
+    def __init__(self,
+                 cat_x: pd.Series,
+                 num_y: pd.Series,
+                 cat_order: list[str] = None,
+                 parametric: bool = True,
+                 alpha_level: float = .05):
+        # Combine into a df
+        df = (
+            pd.concat([cat_x, num_y], axis='columns')
+            .dropna(how='any', axis='rows')
+        )
+
+        if len(cat_x.unique()) < 2:
+            raise ValueError('`cat_x` must contain at least 2 categories.')
+
+        # If not passing categorical ordering
+        if cat_order is None:
+            # Want to preserve native categorical ordering if cat_x was already
+            # an ordered categorical
+            if not is_categorical_dtype(df[cat_x.name].dtype):
+                df[cat_x.name] = df[cat_x.name].astype('category')
+            categories = df[cat_x.name].cat.categories.tolist()
+
+        # If passing categorical ordering
+        else:
+            # Ensure all used categories appear in cat_order
+            missing = (
+                    set(df[cat_x.name].unique()) - set(cat_order)
+                    - {float('nan'), None, pd.NA}
+            )
+            if missing:
+                raise ValueError(f'Categories in cat_x not found in cat_order: '
+                                 f'{missing}')
+            df[cat_x.name] = (
+                df[cat_x.name]
+                .astype(CategoricalDtype(categories=cat_order, ordered=True))
+            )
+            categories = cat_order
+
+        # Pivot to wide: columns = categories, values = num_y
+        wide_df = df.pivot(columns=cat_x.name, values=num_y.name)
+
+        # Warn/omit empty groups
+        observed = wide_df.columns
+        missing = set(categories) - set(observed)
+        if missing:
+            warnings.warn(f'Categories with no data after dropna '
+                          f'(omitted): {missing}')
+
+        super().__init__(data=wide_df,
+                         parametric=parametric,
+                         alpha_level=alpha_level)

@@ -7,8 +7,8 @@
 # Import 3rd party packages
 import statsmodels.api as sm
 # Import local modules
+from unistat import FormulaLogit, FormulaLinReg
 from tests.test_project.dataprep import prep_data
-from unistat import FormulaLinReg, FormulaLogit
 
 
 # Data Formatting ==============================================================
