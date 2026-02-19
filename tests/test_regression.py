@@ -6,13 +6,13 @@
 # Import standard packages
 # Import 3rd party packages
 # Import local modules
-from tests.test_project.dataprep import get_outcome_df
+from tests.test_project.dataprep import prep_data
 from unistat import LogitStats, LinRegStats, LogBinStats
 
 
 # Data Formatting ==============================================================
 
-outcome_df = get_outcome_df()
+outcome_df = prep_data()
 outcome_df['sex_female'] = outcome_df['sex_female'].astype(float)
 
 

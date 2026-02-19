@@ -5,13 +5,13 @@
 # Import standard packages
 import pandas as pd
 # Import local modules
-from tests.test_project.dataprep import get_outcome_df
+from tests.test_project.dataprep import prep_data
 from unistat import MulticlassContingencyStats, BooleanContingencyStats
 
 
 # Data Formatting ==============================================================
 
-outcome_df = get_outcome_df()
+outcome_df = prep_data()
 
 
 ################################################################################

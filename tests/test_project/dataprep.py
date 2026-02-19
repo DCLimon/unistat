@@ -306,7 +306,7 @@ class IRLData:
         return float(gluc_dose * IRLData.CA_GLUCONATE_ELEMENTAL_FRACTION)
 
 
-def get_outcome_df():
+def prep_data():
     df = IRLData().pandas()
 
     # Remove CPR in prog
