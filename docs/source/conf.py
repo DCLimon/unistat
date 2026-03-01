@@ -9,7 +9,7 @@ import tomllib
 
 # Project info ---------------------------------------------------------------
 fallback_author = 'David Limon, MD'
-fallback_version = '0.2.2'
+fallback_version = '0.2.4'
 
 # Add path to src/unistat/ so Sphinx can import the package for autodoc
 sys.path.insert(0, os.path.abspath('../../src'))
@@ -35,7 +35,7 @@ except (FileNotFoundError, KeyError, tomllib.TOMLDecodeError):
 
 # Project Metadata
 project = 'unistat'
-copyright = f'2025, {author}'  # Dynamically include author in copyright
+copyright = f'2026, {author}'  # Dynamically include author in copyright
 version = release  # Short version (e.g., '0.2.0')
 
 # -- General configuration ---------------------------------------------------

@@ -69,6 +69,8 @@ Detailed documentation for ``unistat`` modules:
    examples
    api/contingency
    api/continuous
+   api/exceptions
+   api/formula_regression
    api/regression
    api/resampling
 
