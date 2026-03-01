@@ -228,8 +228,11 @@ class _ContingencyStats(ABC):
             / (self._exp_freq < 5).size
         )
         if exp_freq_lt5 > 0:
-            ExpectedFrequencyWarning(
-                f'Expected frequency < 5 in {exp_freq_lt5:.1%} of cells.'
+            warnings.warn(
+                ExpectedFrequencyWarning(
+                    f'Expected frequency < 5 in {exp_freq_lt5:.1%} of cells.'
+                ),
+                stacklevel=2
             )
 
         return test
