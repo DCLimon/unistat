@@ -79,10 +79,6 @@ class FormulaRegression(ABC):
     data : pd.DataFrame
         Input DataFrame after filtering for columns in formula, dropping NaNs,
         and converting all columns to `float`.
-
-    Notes
-    -----
-
     """
 
     def __init__(self, formula: str, data: pd.DataFrame):
