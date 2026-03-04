@@ -98,10 +98,10 @@ class ExpectedFrequencyWarning(UnistatWarning):
         super().__init__(msg)
 
 
-# Convenience methods ==========================================================
+# Convenience function =========================================================
 
 def warn_experimental(feature: str | type,
-                      message: str | None = None, *,
+                      message: str | None = None,
                       stacklevel: int = 2) -> None:
     r"""Convenience helper to emit an ExperimentalWarning with a correct stacklevel.
 
@@ -111,3 +111,21 @@ def warn_experimental(feature: str | type,
     warn_experimental("TwoSampleStats", "TwoSampleStats is experimental; results may be unstable.")
     """
     warnings.warn(ExperimentalWarning(feature, message), stacklevel=stacklevel)
+
+
+def warn_expected_frequency(message: str | None = None,
+                            stacklevel: int = 2) -> None:
+    r"""Convenience function to emit ExpectedFrequencyWarning.
+
+    Examples
+    --------
+    >>> iv = [0]*8 + [1]*4
+    >>> dv = [0]*6 + [1]*2 + [0]*3 + [1]
+    >>> df = pd.DataFrame({'iv': iv, 'dv': dv})
+    >>> stat = BooleanContingencyStats(
+    ...     table_rows=df['iv'],
+    ...     table_cols=df['dv']
+    ... )
+    ExpectedFrequencyWarning: Expected frequency < 5 in 75.0% of cells.
+    """
+    warnings.warn(ExpectedFrequencyWarning(message), stacklevel=stacklevel)

@@ -14,7 +14,7 @@ import pandas as pd
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
 from ._types import PCorrectionMethod
-from .exceptions import ExpectedFrequencyWarning
+from .exceptions import ExpectedFrequencyWarning, warn_expected_frequency
 
 
 class _ContingencyStats(ABC):
@@ -105,6 +105,8 @@ class _ContingencyStats(ABC):
         crosstab = self._crosstab
         self.row_names = row_names or crosstab.index.tolist()[:-1]
         self.col_names = col_names or crosstab.columns.tolist()[:-1]
+
+        self._exp_freq_lt5()
 
     @property
     def _crosstab(self) -> pd.DataFrame:
@@ -221,17 +223,7 @@ class _ContingencyStats(ABC):
         """
         test = stats.contingency.chi2_contingency(self.matrix,
                                                   correction=correction)
-
         self._exp_freq = test.expected_freq
-        exp_freq_lt5 = (
-            (self._exp_freq < 5).sum()
-            / (self._exp_freq < 5).size
-        )
-        if exp_freq_lt5 > 0:
-            ExpectedFrequencyWarning(
-                f'Expected frequency < 5 in {exp_freq_lt5:.1%} of cells.'
-            )
-
         return test
 
     @property
@@ -251,6 +243,17 @@ class _ContingencyStats(ABC):
     def print_results(self):
         r"""Print contingency tables and Chi-squared results."""
         pass
+
+    def _exp_freq_lt5(self) -> None:
+        """Check if any expected frequency is < 5 and issue warning."""
+        if not hasattr(self, '_exp_freq'):
+            _ = self.chi2()  # compute once, silently
+
+        ratio = (self._exp_freq < 5).sum().sum() / self._exp_freq.size
+        if ratio > 0:
+            warn_expected_frequency(
+                f'Expected frequency < 5 in {ratio:.1%} of cells.'
+            )
 
 
 class MulticlassContingencyStats(_ContingencyStats):

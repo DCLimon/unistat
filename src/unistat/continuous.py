@@ -197,8 +197,12 @@ class TwoSeriesStats:
                  parametric: bool = True,
                  alpha_level: float = .05):
         if test.name == control.name:
-            SeriesNameCollisionWarning('`test` and `control` have '
-                                       'the same column name.')
+            warnings.warn(
+                SeriesNameCollisionWarning(
+                    '`test` and `control` have the same column name.'
+                ),
+                stacklevel=2
+            )
             test = test.rename(f'{test.name}_TEST')
             control = control.rename(f'{control.name}_CTRL')
         self.test = test.dropna().reset_index(drop=True)

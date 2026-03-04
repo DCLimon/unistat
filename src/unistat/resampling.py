@@ -289,8 +289,12 @@ class TwoSeriesBootstrap:
                  boot_p_value: bool = False):
         # Rename test & control if column names are same
         if test.name == control.name:
-            SeriesNameCollisionWarning('`test` and `control` have the '
-                                       'same column name.')
+            warnings.warn(
+                SeriesNameCollisionWarning(
+                    '`test` and `control` have the same column name.'
+                ),
+                stacklevel=2
+            )
             test = test.rename(f'{test.name}_TEST')
             control = control.rename(f'{test.name}_CTRL')
 
@@ -318,40 +322,43 @@ class TwoSeriesBootstrap:
         self._calculate_boot_p = boot_p_value
         if self._calculate_boot_p:
             # Warn about current bootstrap p-value method
-            ExperimentalWarning(
-                feature='Bootstrapped p-value',
-                message='''
-                Currently, the bootstrapped hypothesis test p-value for mean &
-                median uses the assumption of approximate translation
-                equivariance in order to create a bootstrapped null distribution
-                of the test stat. This method pools variance (like Student's
-                t-test) in test & control. When samples have unequal variance,
-                Type I error can somewhat inflate (i.e. p-value is overly
-                optimistic), especially in small or skewed null distributions.
-    
-                Of note, this does NOT affect mean/median permutation tests,
-                and, if bootstrapped Welch's t or Mann-Whitney U-tests were
-                implemented, would not be affected either under current methods.
-    
-                The current bootstrap p-value method is valid but suboptimal for
-                hypothesis testing, though all other bootstrapped stats
-                including CI follow best practices.
-    
-                In summary, use bootstrapping methods to calculate estimated
-                distribution stats (pop. mean, SEM, CIs), but prefer permutation
-                tests for hypothesis tests (has more distribution assumptions, 
-                so mean/SEM/CIs are difficult and not worth calculating. I have
-                not checked for if it's frowned upon to both bootstrap (for
-                distribution stats) & permute (for p-value); I see no obvious
-                issue, but no clear benefit beyond more numbers to throw in a
-                manuscript.
-    
-                Further explanation & references for will be available in
-                TwoSeriesBootstrap.bootstrap docstring via:
-                    `instance_name.bootstrap.__doc__`
-                    - or -
-                    `help(TwoSeriesBootstrap.bootstrap)`
-                '''
+            warnings.warn(
+                ExperimentalWarning(
+                    feature='Bootstrapped p-value',
+                    message='''
+                            Currently, the bootstrapped hypothesis test p-value for mean &
+                            median uses the assumption of approximate translation
+                            equivariance in order to create a bootstrapped null distribution
+                            of the test stat. This method pools variance (like Student's
+                            t-test) in test & control. When samples have unequal variance,
+                            Type I error can somewhat inflate (i.e. p-value is overly
+                            optimistic), especially in small or skewed null distributions.
+
+                            Of note, this does NOT affect mean/median permutation tests,
+                            and, if bootstrapped Welch's t or Mann-Whitney U-tests were
+                            implemented, would not be affected either under current methods.
+
+                            The current bootstrap p-value method is valid but suboptimal for
+                            hypothesis testing, though all other bootstrapped stats
+                            including CI follow best practices.
+
+                            In summary, use bootstrapping methods to calculate estimated
+                            distribution stats (pop. mean, SEM, CIs), but prefer permutation
+                            tests for hypothesis tests (has more distribution assumptions, 
+                            so mean/SEM/CIs are difficult and not worth calculating. I have
+                            not checked for if it's frowned upon to both bootstrap (for
+                            distribution stats) & permute (for p-value); I see no obvious
+                            issue, but no clear benefit beyond more numbers to throw in a
+                            manuscript.
+
+                            Further explanation & references for will be available in
+                            TwoSeriesBootstrap.bootstrap docstring via:
+                                `instance_name.bootstrap.__doc__`
+                                - or -
+                                `help(TwoSeriesBootstrap.bootstrap)`
+                            '''
+                ),
+                stacklevel=2
             )
 
     @property
@@ -919,8 +926,12 @@ class TwoSeriesPermutation:
                  rng: Optional[int] = 519):
         # Rename test & control if column names are same
         if test.name == control.name:
-            SeriesNameCollisionWarning('`test` and `control` have '
-                                       'the same column name.')
+            warnings.warn(
+                SeriesNameCollisionWarning(
+                    '`test` and `control` have the same column name.'
+                ),
+                stacklevel=2
+            )
             test = test.rename(f'{test.name}_TEST')
             control = control.rename(f'{test.name}_CTRL')
 
