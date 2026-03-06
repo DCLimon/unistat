@@ -1,4 +1,4 @@
-"""Classes for statistics based on contingency tables for categorical data.
+r"""Classes for statistics based on contingency tables for categorical data.
 
 :class:`MulticlassContingencyStats` runs summary stats and :math:`\chi^2` test
 stats for a contingency table with any number of IV & DV levels.

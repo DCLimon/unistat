@@ -37,7 +37,7 @@ except (FileNotFoundError, KeyError, tomllib.TOMLDecodeError):
 project = 'unistat'
 copyright = f'2026 {author}'  # Dynamically include author in copyright
 version = release  # Short version (e.g., '0.2.0')
-release_date = '2025-10-17'
+release_date = '2026-03-06'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
