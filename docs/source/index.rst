@@ -1,21 +1,20 @@
 .. unistat documentation master file, created by
    sphinx-quickstart on Wed Sep 17 03:14:30 2025.
 
-unistat Documentation (Version 0.2.3)
-=====================================
+=========================================
+unistat Documentation (Version |version|)
+=========================================
 
 Welcome to the documentation for ``unistat``, a Python library to simplify
 performing and reporting of medical, biostatistics, and social sciences
 statistical analyses.
 
 ``unistat`` is built on top of common Python data analysis & statistics
-libraries, including `pandas <https://pandas.pydata.org/>`__,
-`SciPy <https://scipy.org/>`__, and
-`statsmodels <https://www.statsmodels.org/stable/index.html>`__. This
-library aims to implement best practices for publication-quality statistical
-analysis, and to implement a simple, straightforward API to to run these
-analyses, and view all data that is pertinent for reporting in the context
-of academic publications.
+libraries, including `pandas <pandas-homepage_>`_, `SciPy <scipy-homepage_>`_,
+and `statsmodels <statsmodels-homepage_>`_. This library aims to implement best
+practices for publication-quality statistical analysis, and to implement a
+simple, straightforward API to to run these analyses, and view all data that is
+pertinent for reporting in the context of academic publications.
 
 Accordingly, unlike the statistics libraries on which ``unistat`` is built,
 ``unistat`` is relatively *opinionated*: whereas parent libraries tend to
@@ -36,8 +35,8 @@ this may not be easily accessible or obvious in the API, and in those cases,
 users should access and choose non-default options only with informed
 rationale for doing so.
 
-This documentation covers ``unistat`` **version 0.2.3**, released
-2025-10-17.
+This documentation covers ``unistat`` **version** |version|, released
+|release-date|.
 
 Getting Started
 ---------------
@@ -59,23 +58,21 @@ Coming in future updates to :doc:`examples`.
 API Reference
 -------------
 
-Detailed documentation for ``unistat`` modules:
-
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :maxdepth: 1
+   :caption: Modules:
 
    getting_started
    examples
    api/contingency
    api/continuous
-   api/exceptions
-   api/formula_regression
    api/regression
+   api/formula_regression
    api/resampling
+   references
 
 Indices and Tables
-==================
+------------------
 
 * :ref:`genindex`
 * :ref:`modindex`

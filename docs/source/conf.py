@@ -35,8 +35,9 @@ except (FileNotFoundError, KeyError, tomllib.TOMLDecodeError):
 
 # Project Metadata
 project = 'unistat'
-copyright = f'2026, {author}'  # Dynamically include author in copyright
+copyright = f'2026 {author}'  # Dynamically include author in copyright
 version = release  # Short version (e.g., '0.2.0')
+release_date = '2025-10-17'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -46,6 +47,7 @@ extensions = [
     'sphinx.ext.napoleon',   # Support Google/NumPy docstrings
     'sphinx.ext.intersphinx',  # Link to external documentation
     'sphinx.ext.viewcode',   # Add links to source code
+    'sphinxcontrib.bibtex',  # BibTeX citation support
 ]
 
 # Autodoc settings
@@ -55,6 +57,7 @@ autodoc_default_options = {
     'show-inheritance': True,  # Show inheritance hierarchy
 }
 autoclass_content = 'class'
+autodoc_member_order = 'bysource'
 
 # Intersphinx configuration for external links
 intersphinx_mapping = {
@@ -68,6 +71,11 @@ napoleon_google_docstring = True
 napoleon_numpy_docstring = True
 napoleon_include_init_with_doc = True
 
+# BibTeX configuration
+bibtex_bibfiles = ['references.bib']
+bibtex_default_style = 'unsrt'
+bibtex_reference_style = 'super'
+
 # Add any custom static files (e.g., custom CSS)
 html_static_path = ['_static']
 
@@ -80,20 +88,25 @@ exclude_patterns = []
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = 'sphinx_rtd_theme'  # Use Read the Docs theme
+html_theme = 'pydata_sphinx_theme'  # Use Read the Docs theme
 html_theme_options = {
     'collapse_navigation': False,
-    'sticky_navigation': True,
+    # 'sticky_navigation': True,
     'navigation_depth': 4,
-    'includehidden': True,
-    'titles_only': False,
+    # 'includehidden': True,
+    # 'titles_only': False,
+}
+
+# Remove left sidebar from all pages
+html_sidebars = {
+  "**": []
 }
 
 # Optional: Add a logo or favicon if you have one
 # html_logo = '_static/logo.png'
 # html_favicon = '_static/favicon.ico'
 
-# -- Options for internationalization -----------------------------------------
+# -- Options for internationalization ----------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-internationalization
 
 language = 'en'
@@ -102,3 +115,11 @@ language = 'en'
 
 # Ensure Python code is highlighted correctly
 highlight_language = 'python3'
+
+# -- Global reference labels -------------------------------------------------
+rst_prolog = f"""
+.. |release-date| replace:: {release_date}
+.. _pandas-homepage: https://pandas.pydata.org/
+.. _scipy-homepage: https://scipy.org/
+.. _statsmodels-homepage: https://www.statsmodels.org/stable/index.html
+"""

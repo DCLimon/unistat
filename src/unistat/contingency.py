@@ -1,9 +1,11 @@
-r"""Classes to run statistics based on contingency tables for categorical data.
+"""Classes for statistics based on contingency tables for categorical data.
 
-MulticlassContingencyStats runs summary stats and :math:`\chi^2` test stats for
-a contingency table with any number of IV & DV levels. BooleanContingencyStats
-inherits from MulticlassContingencyStats, and is a special case for a 2x2
-contingency table, also implementing Fisher's exact test.
+:class:`MulticlassContingencyStats` runs summary stats and :math:`\chi^2` test
+stats for a contingency table with any number of IV & DV levels.
+
+:class:`BooleanContingencyStats` inherits from
+:class:`MulticlassContingencyStats`, and is a special case for a 2x2 contingency
+table, also implementing Fisher's & Boschloo's exact tests.
 """
 from abc import ABC, abstractmethod
 import warnings
@@ -20,7 +22,7 @@ from .exceptions import ExpectedFrequencyWarning, warn_expected_frequency
 class _ContingencyStats(ABC):
     r"""Compute contingency table stats with arbitrary number of IV & DV levels.
 
-    Take 2 pandas Series representing row and column variables, compute a
+    Take 2 ``pandas`` Series representing row and column variables, compute a
     contingency table, and provides methods for statistical tests like
     summary & chi-squared stats.
 
@@ -131,7 +133,7 @@ class _ContingencyStats(ABC):
         as_pct : bool, optional
             If True, return percentages instead of counts. Defaults to False.
         axis : str or int, optional
-            Axis for percentage calculation, required if `as_pct` is True:
+            Axis for percentage calculation, required if ``as_pct`` is True:
 
             * 'rows' or 0: percentages across rows.
             * 'columns' or 1: percentages across columns.
@@ -144,7 +146,7 @@ class _ContingencyStats(ABC):
         Raises
         ------
         ValueError
-            If `as_pct` is True and `axis` is None.
+            If ``as_pct`` is True and ``axis`` is None.
         """
         table = self._crosstab.copy()
         table.index = pd.Index(
@@ -293,17 +295,17 @@ class MulticlassContingencyStats(_ContingencyStats):
     col_names : list[str]
         Names for column levels.
     matrix : pd.DataFrame
-        Crosstabulated frequency counts, with levels of `idx_series` and
-        `col_series` as the index and columns, respectively. `matrix` does not
+        Crosstabulated frequency counts, with levels of ``idx_series`` and
+        `col_series` as the index and columns, respectively. ``matrix`` does not
         include marginal row/column totals.
     exp_freq : pd.DataFrame
-        Crosstabulated expected frequency counts. Format mirrors `matrix`.
+        Crosstabulated expected frequency counts. Format mirrors ``matrix``.
 
     Methods
     -------
     get_table(as_pct=False, axis='rows')
         Crosstabulated frequency counts with marginal row/column totals. Format
-        otherwise mirrors `matrix`.
+        otherwise mirrors ``matrix``.
 
     See Also
     --------
@@ -894,30 +896,31 @@ class BooleanContingencyStats(_ContingencyStats):
 
     p-values are displayed for both the chi-square test of independence (ToI),
     and for an exact test like Fisher's. Deciding which test to report can
-    follow Cochran's rule-of-thumb criteria [1]_ [2]_, which includes (but is
-    not limited to) the following as indication for use of an exact test
-    (Fisher's exact test in the original 1952 article) over chi-squared:
+    follow Cochran's rule-of-thumb criteria :cite:`cochran_1952`
+    :cite:`cochran_1954`, which includes (but is not limited to) the following
+    as indication for use of an exact test (Fisher's exact test in the original
+    1952 article) over chi-squared:
 
     * Any cell-wise expected frequency < 5
         * Actual rule is <20% must have expected frequency < 5, which means no
           cells can have low expected frequency in a 2x2 table.
     * N < 20
-    * Cochran (1952) [1]_ recommends using Yates' correction if N > 40 but
-      any expected frequency < 500; ``unistat`` does not implement this
-      by default.
+    * Cochran (1952) :cite:`cochran_1952` recommends using Yates' correction if
+      N > 40 but any expected frequency < 500; ``unistat`` does not implement
+      this by default.
 
     By default, ``unistat`` *never* implements Yates' correction factor.
-    Hasselblad & Lokhnygina (2007) [3]_ found that in **all** cases, Yates-
-    corrected chi-squared is inferior to Fisher's exact test. Furthermore,
-    they found that even Fisher's exact test is too conservative, and that,
-    depending on sample size, Fisher's mid-p test or Barnard's exact test offer
-    better power while maintaining target Type I error control.
+    Hasselblad & Lokhnygina (2007) :cite:`hasselblad_2007` found that in **all**
+    cases, Yates-corrected chi-squared is inferior to Fisher's exact test.
+    Furthermore, they found that even Fisher's exact test is too conservative,
+    and that, depending on sample size, Fisher's mid-p test or Barnard's exact
+    test offer better power while maintaining target Type I error control.
 
     Alternative exact test(s) will be implemented in later releases; expect
     that at a minimum, this will include Boschloo's exact test.
 
-    Lydersen et al. (2009) [4]_ compared multiple different exact tests, and
-    noted the following:
+    Lydersen et al. (2009) :cite:`lydersen_2009` compared multiple different
+    exact tests, and noted the following:
 
     * Standard Fisher's exact test is near-uniformly too conservative, though it
       always maintains Type I error rate
@@ -932,30 +935,11 @@ class BooleanContingencyStats(_ContingencyStats):
 
         * Further improved using the Berger-Boos correction, particularly for
           unbalanced designs (e.g. if survival occurs much more often than
-          mortality) [4]_ [5]_
-        * Standard Berger-Boos correction factor is :math:`\gamma = 0.001` [4]_
+          mortality) :cite:`lydersen_2009` :cite:`kang_2008`
+        * Standard Berger-Boos correction factor is :math:`\gamma = 0.001`
+          :cite:`lydersen_2009`
+
             * Not implemented by SciPy, though included in R ``Exact`` package
-
-    References
-    ----------
-    ..  [1] Cochran, William G. The :math:`\text{\chi^2}` Test of Goodness of
-        Fit. Ann. Math. Statist. 23 (3) 315 - 345, September 1952.
-        doi: 10.1214/aoms/1177729380.
-
-    ..  [2] Cochran, William G. The Combination of Estimates from Different
-        Experiments" Biometrics 10, no. 1 (1954): 101–29. doi: 10.2307/3001666.
-
-    ..  [3] Hasselblad V, Lokhnygina Y. Tests for 2 x 2 tables in clinical
-        trials. Journal of Modern Applied Statistical Methods. 2007;6:456–468.
-        doi: 10.56801/10.56801/v6.i.318.
-
-    ..  [4] Lydersen S, Fagerland MW, Laake P. Recommended tests for association
-        in 2 x 2 tables. Stat Med. 2009 Mar 30;28(7):1159-75.
-        doi: 10.1002/sim.3531.
-
-    ..  [5] Kang SH, Ahn CW. Tests for the homogeneity of two binomial
-        proportions in extremely unbalanced 2 x 2 contingency tables. Stat Med.
-        2008 Jun 30;27(14):2524-35. doi: 10.1002/sim.3055.
     """
 
     def __init__(self,
@@ -1100,9 +1084,10 @@ class BooleanContingencyStats(_ContingencyStats):
             Alternative hypothesis: 'two-sided', 'less', or 'greater'
         n_sampling_points : int, default 32
             Number of sampling points used in the construction of the sampling
-            method. See `scipy.stats.boschloo_exact()`
-            <https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.boschloo_exact.html>`_
+            method. See `scipy.stats.boschloo_exact() <bosch-exact>`_
             documentation for further detail.
+
+        .. _bosch-exact: https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.boschloo_exact.html
 
         Returns
         -------
@@ -1112,28 +1097,21 @@ class BooleanContingencyStats(_ContingencyStats):
         pvalue : float
             Boschloo's exact p-value.
 
-
         Notes
         -----
-        Lydersen et al. (2009) [1]_ compared multiple different exact tests, and
-        found Boschloo's exact test to be universally more powerful than both
-        traditional and mid-p Fisher's exact tests. Boschloo's exact test can be
-        further improved using the Berger-Boos correction, particularly for
-        unbalanced designs (e.g. if survival occurs much more often than
-        mortality) [1]_ [2]_
-        * Standard Berger-Boos correction factor is :math:`\gamma = 0.001` [1]_
-            * Not implemented by SciPy, though included in R ``Exact`` package
+        Lydersen et al. (2009) :cite:`lydersen_2009` compared multiple different exact
+        tests, and found Boschloo's exact test to be universally more powerful
+        than both traditional and mid-p Fisher's exact tests. Boschloo's exact
+        test can be further improved using the Berger-Boos correction,
+        particularly for unbalanced designs (e.g. if survival occurs much more
+        often than mortality) :cite:`lydersen_2009` :cite:`kang_2008`
+
+        * Standard Berger-Boos correction factor is :math:`\gamma = 0.001`
+          :cite:`lydersen_2009`
+
+            * Not implemented by `SciPy <scipy-homepage_>`_, though included in
+              R ``Exact`` package
             * May be implemented here in future update
-
-        References
-        ----------
-        ..  [1] Lydersen S, Fagerland MW, Laake P. Recommended tests for association
-        in 2 x 2 tables. Stat Med. 2009 Mar 30;28(7):1159-75.
-        doi: 10.1002/sim.3531.
-
-        ..  [2] Kang SH, Ahn CW. Tests for the homogeneity of two binomial
-        proportions in extremely unbalanced 2 x 2 contingency tables. Stat Med.
-        2008 Jun 30;27(14):2524-35. doi: 10.1002/sim.3055.
         """
         return stats.boschloo_exact(self.matrix,
                                     alternative=alternative,

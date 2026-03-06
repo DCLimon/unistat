@@ -1,35 +1,3 @@
-"""Module for regression statistics.
-
-This module provides an abstract base class and concrete implementations for
-performing regression analyses using statsmodels. It supports linear regression,
-logistic regression, and log-binomial regression, with features like variance
-inflation factor (VIF) calculation, standardized regressions, odds/risk ratios,
-and formatted output.
-
-Dependencies
-------------
-* abc: For abstract base classes.
-* numpy: For numerical operations.
-* pandas: For data manipulation.
-* scipy: For statistical functions (z-score).
-* statsmodels: For regression models and VIF.
-
-Classes
--------
-RegressionStats
-    Abstract base class for regression statistics.
-LogitStats
-    Class for logistic regression statistics.
-LinRegStats
-    Class for linear regression statistics.
-LogBinStats
-    Experimental class for log-binomial regression statistics.
-
-Notes
------
-Assumes input data are pandas Series/DataFrames. Handles boolean columns
-specially in standardization.
-"""
 import ast
 import re
 from abc import ABC, abstractmethod
@@ -46,36 +14,26 @@ FormulaSides = namedtuple('FormulaSides', ['lhs', 'rhs'])
 
 
 class FormulaRegression(ABC):
-    """Abstract base class for formula-based regression statistics.
+    r"""Abstract base class for formula-based regression statistics.
 
     Provides common functionality for regression models, including data
     preparation, standardization, VIF calculation, and properties for
     regression results.
 
     Uses Wilkinson formulae (akin to R-style formulae), which are implemented
-    in `statsmodels` via the `patsy` package.
+    in `statsmodels <statsmodels-homepage_>`_ via the ``patsy`` package.
 
     Parameters
     ----------
     formula : str
-        `statsmodels`/`patsy`/`R`-style formula defining the regression model.
+        ``statsmodels``/``patsy``/``R``-style formula defining the regression
+        model.
     data : pd.DataFrame
-        Data for the model. `data` must contain (at a minimum) all variables
-        referenced by `formula`.
+        Data for the model. ``data`` must contain (at a minimum) all variables
+        referenced by ``formula``.
 
     Attributes
     ----------
-    X : pd.DataFrame
-        Feature DataFrame used in model, after transformation by Patsy. Includes
-        'Intercept' column.
-    y : pd.Series
-        Target Series used in model.
-    reg : statsmodels regression result
-        Fitted regression model.
-    X_std : pd.DataFrame
-        `X`, with all non-Boolean columns transformed to Z-scores.
-    std_reg : statsmodels regression result
-        Fitted standardized regression model.
     data : pd.DataFrame
         Input DataFrame after filtering for columns in formula, dropping NaNs,
         and converting all columns to `float`.
@@ -273,6 +231,12 @@ class FormulaRegression(ABC):
 
     @property
     def reg(self):
+        r"""Fitted `statsmodels <statsmodels-homepage_>`_ regression model.
+
+        Returns
+        -------
+        Fitted model.
+        """
         # Run regression if never done prior (which defines self._reg_cache)
         if not hasattr(self, '_reg_cache'):
             self._run_regression(standardize=False)
@@ -280,6 +244,12 @@ class FormulaRegression(ABC):
 
     @property
     def std_reg(self):
+        r"""Fitted ``statsmodels` standardized regression model.
+
+        Returns
+        -------
+        Fitted model.
+        """
         # Run regression if never done prior (which defines self._reg_cache)
         if not hasattr(self, '_std_reg_cache'):
             self._run_regression(standardize=True)
@@ -383,10 +353,26 @@ class FormulaRegression(ABC):
 
     @property
     def X(self):
+        r"""Predictor ``pd.DataFrame`` used in model.
+
+        Has ``patsy`` transformations applied. Includes ``'Intercept'`` column.
+
+        Returns
+        -------
+        pd.DataFrame
+        """
         return self._dmatrices.rhs
 
     @property
     def y(self):
+        r"""Outcome ``pd.Series`` used in model.
+
+        Has ``patsy`` transformations applied. Includes ``'Intercept'`` column.
+
+        Returns
+        -------
+        pd.Series
+        """
         return self._dmatrices.lhs
 
     @property
@@ -411,6 +397,14 @@ class FormulaRegression(ABC):
 
     @property
     def X_std(self):
+        r"""Standardized (Z-scored) version of :attr:X used in model.
+
+        Has ``patsy`` transformations applied. Includes ``'Intercept'`` column.
+
+        Returns
+        -------
+        pd.DataFrame
+        """
         return self._dmatrices_std.rhs
 
     @property
@@ -495,6 +489,19 @@ class FormulaLogit(FormulaRegression):
             return self._std_reg_cache
 
     def logit_or(self, standardize: bool = False):
+        r"""Odds ratios (ORs) for each feature in :attr:`X`.
+
+        Parameters
+        ----------
+        standardize : bool, default False
+            Whether crude or standardized ORs calculated.
+
+        Returns
+        -------
+        pd.DataFrame
+            ``columns=['OR', '95% CI lower', '95% CI upper']``; ``index`` is
+            each column in :attr:`X`/:attr:`X_std`, including the intercept.
+        """
         if not standardize:
             model = self.reg
         elif self.std_reg is None:

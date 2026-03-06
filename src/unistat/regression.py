@@ -1,35 +1,3 @@
-"""Module for regression statistics.
-
-This module provides an abstract base class and concrete implementations for
-performing regression analyses using statsmodels. It supports linear regression,
-logistic regression, and log-binomial regression, with features like variance
-inflation factor (VIF) calculation, standardized regressions, odds/risk ratios,
-and formatted output.
-
-Dependencies
-------------
-* abc: For abstract base classes.
-* numpy: For numerical operations.
-* pandas: For data manipulation.
-* scipy: For statistical functions (z-score).
-* statsmodels: For regression models and VIF.
-
-Classes
--------
-RegressionStats
-    Abstract base class for regression statistics.
-LogitStats
-    Class for logistic regression statistics.
-LinRegStats
-    Class for linear regression statistics.
-LogBinStats
-    Experimental class for log-binomial regression statistics.
-
-Notes
------
-Assumes input data are pandas Series/DataFrames. Handles boolean columns
-specially in standardization.
-"""
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
@@ -41,7 +9,7 @@ from .exceptions import warn_experimental
 
 
 class RegressionStats(ABC):
-    """Abstract base class for regression statistics.
+    r"""Abstract base class for regression statistics.
 
     Provides common functionality for regression models, including data
     preparation, standardization, VIF calculation, and properties for
@@ -72,12 +40,10 @@ class RegressionStats(ABC):
         `X`, with all non-Boolean columns transformed to Z-scores.
     std_reg : statsmodels regression result
         Fitted standardized regression model.
-    _df : pd.DataFrame
-        Concatenated DataFrame of X and y.
 
     Notes
     -----
-    Observations with any missing data in either `X` *or* `y` are dropped.
+    Observations with any missing data in either ``X`` *or* ``y`` are dropped.
     """
 
     def __init__(self, X, y, bool_col_names: list | str | None = None):
@@ -154,7 +120,7 @@ class RegressionStats(ABC):
 
     @property
     def X_std(self):
-        """Standardized version of X (z-scores), excluding boolean columns.
+        """Standardized version of ``X`` (Z-scores), excluding boolean columns.
 
         Returns
         -------
@@ -299,7 +265,7 @@ class RegressionStats(ABC):
 
 
 class LogitStats(RegressionStats):
-    """Class for logistic regression statistics.
+    r"""Class for logistic regression statistics.
 
     Extends RegressionStats for logistic regression using Logit model.
 
@@ -459,7 +425,7 @@ class LinRegStats(RegressionStats):
 
     Notes
     -----
-    `unistat` does NOT standardize the values of `y` for linear regression.
+    ``unistat`` does NOT standardize the values of ``y`` for linear regression.
     Typically, "standardized regression" refers to a transformation of
     :math:`y \sim X` such that
     :math:`\text{SD}\left( y \right) \sim \text{SD}\left( X \right)`; a
@@ -468,8 +434,8 @@ class LinRegStats(RegressionStats):
     this to be difficult to interpret, with no benefit beyond adherence to
     convention.
 
-    Instead, `unistat` opts for "X-standardized regression". That is, since only
-    :math:`X` is Z-scored, :math:`y \sim X` is transformed such that
+    Instead, ``unistat`` opts for "X-standardized regression". That is, since
+    only :math:`X` is Z-scored, :math:`y \sim X` is transformed such that
     :math:`y \sim \text{SD}\left( X \right)`. Here, a coefficient :math:`\beta`
     is interpreted as a 1-S.D. increase in :math:`X` conferring an absolute
     increase of :math:`\beta` units in :math:`y`. This is more easily
@@ -513,15 +479,14 @@ class LinRegStats(RegressionStats):
     def pretty_print_coefs(self,
                            standardize: bool = False,
                            label: bool = True) -> None:
-        """
-        Print formatted regression coefficients for easy copy-pasting.
+        r"""Print formatted regression coefficients for easy copy-pasting.
 
         Parameters
         ----------
-        standardize : bool, optional
-            Use standardized model. Defaults to False.
-        label : bool, optional
-            Include parameter labels. Defaults to True.
+        standardize : bool, Default False
+            Use standardized model.
+        label : bool, Default True
+            Include parameter labels.
 
         Raises
         ------
@@ -561,7 +526,7 @@ class LinRegStats(RegressionStats):
 
 
 class LogBinStats(RegressionStats):
-    """Class for log-binomial regression statistics (experimental).
+    r"""Class for log-binomial regression statistics (experimental).
 
     Extends RegressionStats for generalized linear model with binomial family
     and log link.

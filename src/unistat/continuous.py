@@ -1,41 +1,3 @@
-r"""Module for statistical analysis of continuous data.
-
-This module provides classes for analyzing relationships between two continuous
-or categorical series, including correlation tests, two-sample comparisons, and
-grouped statistical tests. It supports both parametric and nonparametric methods.
-
-Dependencies
-------------
-* typing: for Literal
-* collections: For namedtuple.
-* numpy: For numerical operations.
-* pandas: For data manipulation and series handling.
-* scipy: For statistical tests (Pearson, Spearman, t-test, Mann-Whitney U).
-* .exceptions:
-  * For custom exceptions: SeriesNameCollisionError & SeriesNameCollisionWarning
-
-Classes
--------
-CorrStats
-    Class for correlation analysis (Pearson or Spearman).
-TwoSeriesStats
-    Class for two-sample statistical comparisons.
-TwoSampleStats
-    Class for two-sample comparisons with a boolean grouping variable.
-ControlTestStats
-    Named tuple for storing confidence intervals of control and test groups.
-MultiSeries1WayBGStats
-    Class for 1-way between-group statistical comparisons cross 3+ levels.
-MultiSample1WayBGStats
-    MultiSeries1WayBGStats
-    Class for 1-way between-group comparisons with a categorical
-    grouping variable (3+ levels).
-
-Notes
------
-Assumes input series are appropriately typed (e.g., continuous for numerical
-tests, boolean/categorical for grouping). Handles missing data by dropping NaNs.
-"""
 import warnings
 from typing import Literal
 from collections import namedtuple
@@ -71,8 +33,6 @@ class CorrStats:
         Second variable after cleaning.
     parametric : bool
         Whether to use parametric (Pearson) or nonparametric (Spearman) method.
-    _df : pd.DataFrame
-        Concatenated DataFrame of x and y with NaNs dropped.
     """
     def __init__(self, x: pd.Series, y: pd.Series, parametric: bool = True):
         self._df = pd.concat([x, y], axis='columns').dropna(axis='index')
@@ -107,12 +67,14 @@ class CorrStats:
 
     @property
     def result(self):
-        """Compute correlation test result.
+        r"""Compute correlation test result.
 
         Returns
         -------
-        scipy.stats._stats_py.PearsonRResult or scipy.stats._stats_py.SpearmanrResult
-            Result object with statistic and p-value.
+        statistic : float
+            Test statistic (:math:`r` or :math:`\rho`).
+        pvalue : float
+            *P*-value for the test.
         """
         if self.parametric:
             return stats.pearsonr(self.x, self.y, alternative='two-sided')
@@ -121,7 +83,7 @@ class CorrStats:
 
     @property
     def n(self):
-        """Sample size after dropping NaNs.
+        r"""Sample size after dropping NaNs.
 
         Returns
         -------
@@ -132,23 +94,23 @@ class CorrStats:
 
     @property
     def stat(self):
-        """Correlation coefficient (r for Pearson, rho for Spearman).
+        r"""Correlation coefficient (``r`` for Pearson, ``rho`` for Spearman).
 
         Returns
         -------
         float
-            Correlation statistic.
+            Correlation test statistic.
         """
         return self.result.statistic
 
     @property
     def p(self):
-        """P-value of the correlation test.
+        r"""*P*-value of the correlation test.
 
         Returns
         -------
         float
-            P-value.
+            *P*-value.
         """
         return self.result.pvalue
 
@@ -211,7 +173,7 @@ class TwoSeriesStats:
         self.alpha = alpha_level
 
     def __str__(self):
-        """String representation of summary statistics and test results.
+        r"""String representation of summary statistics and test results.
 
         Returns
         -------
@@ -227,17 +189,19 @@ class TwoSeriesStats:
     def conf_int(self,
                  pct_ci: float = None,
                  dist: Literal['t', 'normal', 'z'] = 't'):
-        """Calculate CI of mean of test and control groups, based on SEM.
+        r"""Calculate CI of mean of test and control groups, based on SEM.
 
-        `pct_ci` can be used to custom-define a CI width. By default, 1 - alpha
-        is used, as set in the TwoSeriesStats object.
+        ``pct_ci`` can be used to custom-define a CI width. By default,
+        ``1 - alpha`` is used, as set in the :class:`TwoSeriesStats` object.
 
         Parameters
         ----------
         pct_ci : float, optional
-            Confidence level (e.g., 0.95 for 95%). Defaults to 1 - alpha.
+            Confidence level (e.g., ``0.95`` for 95%). Defaults to
+            ``1 - alpha``.
         dist: {'t', 'normal'}, optional
-            Parent distribution to use when calculating SEM. Defaults to 't'.
+            Parent distribution to use when calculating SEM. Defaults to
+            ``'t'``.
 
         Returns
         -------
@@ -271,7 +235,7 @@ class TwoSeriesStats:
         Rather than considering correction factors, our recommendation for small
         N, or to define CI about a measure of central tendency other than the
         sample mean, is to use a bootstrapped CI, as implemented in the
-        ``resampling`` module.
+        :doc:`resampling <resampling>` module.
         """
         if pct_ci is None:
             pct_ci = 1 - self.alpha
@@ -308,12 +272,12 @@ class TwoSeriesStats:
         return ControlTestStats(control=control_ci, test=test_ci)
 
     def parametric_summ_stats(self, alpha_level: float = None):
-        """Compute parametric summary statistics (mean, std, CI, etc.).
+        r"""Compute parametric summary statistics (mean, std, CI, etc.).
 
         Parameters
         ----------
         alpha_level : float, optional
-            Significance level for CI. Defaults to self.alpha.
+            Significance level for CI. Defaults to :attr:`alpha`.
 
         Returns
         -------
@@ -355,13 +319,13 @@ class TwoSeriesStats:
         return summ_stats
 
     def t_test(self, equal_var: bool = False):
-        """Perform 2-independent-samples t-test (Welch's or Student's).
+        r"""Perform 2-independent-samples t-test (Welch's or Student's).
 
         Defaults to Welch's t-test for heteroskedastic samples. Delacre et al.
-        (2017) recommends routinely use of Welch's test for unequal variance
-        over Student's method, rather than selective use of Welch's test. The
-        loss in power from Welch's vs. Student's test in cases of equal variance
-        is minimal, whereas the reduction in Type I error rate from Welch's in
+        (2017) recommends routine use of Welch's test for unequal variance over
+        Student's method, rather than selective use of Welch's test. The loss in
+        power from Welch's vs. Student's test in cases of equal variance is
+        minimal, whereas the reduction in Type I error rate from Welch's in
         cases of unequal variance is substantial; a strong determination of
         homoskedasticity is often not simple.
 
@@ -396,12 +360,13 @@ class TwoSeriesStats:
         return output
 
     def nonparametric_summ_stats(self, alpha_level: float = None):
-        """Compute nonparametric summary statistics (quantiles, IQR).
+        r"""Compute nonparametric summary statistics (quantiles, IQR).
 
         Parameters
         ----------
         alpha_level : float, optional
-            Significance level for hypothesis direction. Defaults to self.alpha.
+            Significance level for hypothesis direction. Defaults to
+            :attr:`alpha`.
 
         Returns
         -------
@@ -459,12 +424,12 @@ class TwoSeriesStats:
         return summ_stats
 
     def mwu_test(self):
-        """Perform Mann-Whitney U test.
+        r"""Perform Mann-Whitney U test.
 
         Returns
         -------
         pd.Series
-            Test results including U-statistic and p-value.
+            Test results with ``index=['U-statistic', 'p-value']``.
         """
         result = stats.mannwhitneyu(x=self.test, y=self.control)
 
@@ -502,10 +467,6 @@ class TwoSampleStats(TwoSeriesStats):
         Boolean grouping variable.
     y : pd.Series
         Continuous outcome variable.
-    _test_x : bool
-        Boolean level for test group.
-    _df : pd.DataFrame
-        Concatenated DataFrame of bool_x and num_y with NaNs dropped.
 
     Raises
     ------
@@ -608,6 +569,7 @@ class MultiSeries1WayBGStats:
 
     Also implements post hoc testing with automatic *p*-value correction for
     multiple comparisons (Holm-Bonferroni method by default).
+
     * parametric post hoc tests via pairwise Welch t-tests.
     * nonparametric post hoc tests via pairwise Mann-Whitney U-tests.
 
@@ -703,22 +665,25 @@ class MultiSeries1WayBGStats:
     def conf_int(self,
                  pct_ci: float = None,
                  dist: Literal['t', 'normal', 'z'] = 't') -> pd.DataFrame:
-        """Calculate CI of mean of all columns in `data`, based on SEM.
+        r"""Calculate CI of mean of all columns in `data`, based on SEM.
 
-        `pct_ci` can be used to custom-define a CI width. By default, 1 - alpha
-        is used, as set in the TwoSeriesStats object.
+        ``pct_ci`` can be used to custom-define a CI width. By default,
+        ``1 - alpha`` is used, as set in the TwoSeriesStats object.
 
         Parameters
         ----------
         pct_ci : float, optional
-            Confidence level (e.g., 0.95 for 95%). Defaults to 1 - alpha.
+            Confidence level (e.g., ``0.95`` for 95%). Defaults to
+            ``1 - alpha``.
         dist: {'t', 'normal'}, optional
-            Parent distribution to use when calculating SEM. Defaults to 't'.
+            Parent distribution to use when calculating SEM. Defaults to
+            ``'t'``.
 
         Returns
         -------
         pd.DataFrame
-            Column names match `data.columns`; `index=['ci_lower', 'ci_upper']`.
+            Column names match ``data.columns``;
+            ``index=['ci_lower', 'ci_upper']``.
 
         Notes
         -----
@@ -740,8 +705,8 @@ class MultiSeries1WayBGStats:
         Rather than considering correction factors, our recommendation for small
         N, or to define CI about a measure of central tendency other than the
         sample mean, is to use a bootstrapped CI, as implemented in the
-        ``resampling`` module. However, a bootstrapping class has not yet
-        been implemented for multiclass (3+ level) cases.
+        :doc:`resampling <resampling>` module. However, a bootstrapping class
+        has not yet been implemented for multiclass (3+ level) cases.
         """
         if pct_ci is None:
             pct_ci = 1 - self.alpha
@@ -781,12 +746,12 @@ class MultiSeries1WayBGStats:
         Parameters
         ----------
         alpha_level : float, optional
-            Significance level for CI. Defaults to self.alpha.
+            Significance level for CI. Defaults to :attr:`alpha`.
 
         Returns
         -------
         pd.DataFrame
-            Summary statistics for each column in ``data``.
+            Summary statistics for each column in :attr:`data`.
         """
         if alpha_level is None:
             alpha_level = self.alpha
@@ -868,7 +833,7 @@ class MultiSeries1WayBGStats:
         -------
         pd.DataFrame
             Summary statistics with quantiles and IQR for each column in
-            ``data``.
+            :attr:`data`.
         """
         if alpha_level is None:
             alpha_level = self.alpha
@@ -1061,21 +1026,21 @@ class MultiSeries1WayBGStats:
 
         Uses pairwise combinations of input Series, and calculates t-test for
         each pair. By default, uses Welch t-test rather than Student t-test (see
-        ``continuous.TwoSeriesStats.t_test()`` for rationale).
+        :meth:`TwoSeriesStats.t_test()` for rationale).
 
         *p*-Values for all pairwise tests then undergo correction for multiple
         comparisons. By default, Holm-Bonferroni correction is used, but all
         correction methods supported by
-        `statsmodels.stats.multitest.multipletests()
+        `statsmodels.stats.multitest.multipletests
         <https://www.statsmodels.org/dev/generated/statsmodels.stats.multitest.multipletests.html>`_
         are supported.
 
         Parameters
         ----------
         equal_var : bool, default False
-            If False, use Welch t-test; otherwise, use Student t-test.
+            If ``False``, use Welch t-test; otherwise, use Student t-test.
         p_corr_method : str, default 'holm'
-            *p*-Value correction method. Cannot be None since *p*-value
+            *P*-Value correction method. Cannot be ``None`` since *P*-value
             correction is always indicated for multiple pairwise comparisons.
 
         Returns
@@ -1083,7 +1048,7 @@ class MultiSeries1WayBGStats:
         pd.DataFrame
             DataFrame with a ``pd.MultiIndex`` in ``(control, test)`` format.
             Columns give *t*-statistic, Student DoF, calculated Welch DoF,
-            and uncorrected and corrected p-values.
+            and uncorrected and corrected *P*-values.
         """
         t_results: list[pd.Series] = []
 
@@ -1127,25 +1092,25 @@ class MultiSeries1WayBGStats:
         *p*-Values for all pairwise tests then undergo correction for multiple
         comparisons. By default, Holm-Bonferroni correction is used, but all
         correction methods supported by
-        `statsmodels.stats.multitest.multipletests()
+        `statsmodels.stats.multitest.multipletests
         <https://www.statsmodels.org/dev/generated/statsmodels.stats.multitest.multipletests.html>`_
         are supported.
 
         Parameters
         ----------
         p_corr_method : str, default 'holm'
-            *p*-Value correction method. Cannot be None since *p*-value
+            *P*-Value correction method. Cannot be None since *P*-value
             correction is always indicated for multiple pairwise comparisons.
 
         Returns
         -------
         pd.DataFrame
             DataFrame with a ``pd.MultiIndex`` in ``(control, test)`` format.
-            Since *p*-value can reach significance even if medians are the same
+            Since *P*-value can reach significance even if medians are the same
             between groups, ``'Ha'`` column denotes the direction of effect
             when uncorrected *p* is significant.
             Columns also give *U*-statistic, DoF, and uncorrected and corrected
-            *p*-values.
+            *{*-values.
         """
         mwu_results: list[pd.Series] = []
         mwu_ha_map: dict[str, str] = {
@@ -1201,7 +1166,7 @@ class MultiSeries1WayBGStats:
 class MultiSample1WayBGStats(MultiSeries1WayBGStats):
     r"""Compare continuous outcome across 3 groups defined by a categorical.
 
-    Extends ``MultiSeries1WayBGStats`` to split a continuous Series by a
+    Extends :class:`MultiSeries1WayBGStats` to split a continuous Series by a
     categorical grouping variable.
 
     Parameters

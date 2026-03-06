@@ -1,65 +1,10 @@
-r"""Module for resampling statistics, including bootstrapping and permutations.
-
-This module provides classes for bootstrapping and permutation tests on two
-series or samples. It supports tests on means and medians for bootstrapping,
-and additional t-tests and Mann-Whitney U for permutations. Results include
-observed statistics, distributions, confidence intervals, and p-values.
-
-Dependencies
-------------
-* typing: For type hints.
-* collections.abc: For abstract base classes.
-* dataclasses: For dataclass definitions.
-* warnings: For issuing warnings.
-* numpy: For numerical operations and arrays.
-* pandas: For data manipulation.
-* scipy: For statistical functions (bootstrap, permutation_test, ttest_ind, mannwhitneyu).
-* ._types: For custom type VectorLike.
-* .exceptions: For custom exceptions and warnings.
-
-Classes
--------
-BootResult
-    Dataclass for bootstrap results.
-PermResult
-    Dataclass for permutation results.
-TwoSeriesBootstrap
-    Class for bootstrapping two series.
-TwoSampleBootstrap
-    Class for bootstrapping with a boolean grouping variable.
-TwoSeriesPermutation
-    Class for permutation tests on two series.
-TwoSamplePermutation
-    Class for permutation tests with a boolean grouping variable.
-
-Warnings
---------
-
-Note that while bootstrapped hypothesis tests are possible, they are much more
-complicated to perform than permutation hypothesis tests. Bootstrapped
-hypothesis tests and p-values are a WIP. While bootstrapped CIs are reliable
-and preferred, currently (and probably generally), permutation tests should be
-preferred for hypothesis tests. To avoid accidentally using an unreliable or
-biased bootstrapped p-value in actual practice, displaying of bootstrapped
-p-values is currently controlled by the ``boot_p_value`` Boolean parameter,
-which currently defaults to ``False``; setting it to ``True`` will allow access
-to the WIP bootstrapped p-value.
-
-Notes
------
-Assumes input series are continuous. Handles missing data by dropping NaNs.
-Some features, like bootstrap p-values, are experimental.
-"""
-# Standard
 from typing import Optional, Literal
 from collections.abc import Callable
 from dataclasses import dataclass
 import warnings
-# 3rd party
 import numpy as np
 import pandas as pd
 from scipy import stats
-# Local
 from ._types import VectorLike
 from .exceptions import (
     ExperimentalWarning, SeriesNameCollisionError, SeriesNameCollisionWarning
@@ -137,16 +82,16 @@ class TwoSeriesBootstrap:
        Test group data.
     control : pd.Series
        Control group data.
-    test_type : {'means', 'medians'}, optional
-       Type of test statistic. Defaults to 'means'.
-    alpha_level : float, optional
-       Significance level for CI. Defaults to 0.05.
-    n_resamples : int, optional
-       Number of bootstrap resamples. Defaults to 10,000.
-    rng : int, optional
-       Random seed for reproducibility. Defaults to 519.
-    boot_p_value : bool, optional
-       If True, compute experimental bootstrap p-value. Defaults to False.
+    test_type : {'means', 'medians'}, default 'means'
+       Type of test statistic.
+    alpha_level : float, default 0.05
+       Significance level for CI.
+    n_resamples : int, default 10_000
+       Number of bootstrap resamples.
+    rng : int, default 519
+       Random seed for reproducibility.
+    boot_p_value : bool, default False
+       If True, compute experimental bootstrap P-value.
 
     Attributes
     ----------
@@ -166,15 +111,15 @@ class TwoSeriesBootstrap:
     Raises
     ------
     ValueError
-       If test_type is invalid..
+       If test_type is invalid.
 
     Notes
     -----
-    Regarding the current WIP bootstrap hypothesis test, p-values are not
+    Regarding the current WIP bootstrap hypothesis test, P-values are not
     currently displayed by default, as controlled by the ``boot_p_value``
     Boolean parameter.
 
-    Under Frequentist statistical philosophy, a p-value represents the
+    Under Frequentist statistical philosophy, a P-value represents the
     probability of getting results as-or-more-extreme than those observed, if
     the null hypothesis is true (this is even the assumption for classical
     calculated asymptotic hypothesis tests). In the context of bootstrap
@@ -212,7 +157,7 @@ class TwoSeriesBootstrap:
     via a bootstrapped methodology, in addition to the bootstrapped distribution
     under the Ha (used to estimate CIs), one must also use some method to
     bootstrap the null distribution in order to calculate p-value. Boos &
-    Stefanski (2013) [#2SeriesBoot_1]_ suggest 2 methods, as summarized in this
+    Stefanski (2013) :cite:`boos_11_6` suggest 2 methods, as summarized in this
     `lecture by Alex Kaizer <https://www.alexkaizer.com/bios_6618/files/bios6618/W16/bootstrap_pvalue.pdf>`_:
 
     1. Combine all test and control observations (e.g. Hgb value for both blunt
@@ -269,12 +214,6 @@ class TwoSeriesBootstrap:
     (that test & control groups are exchangeable; that is, they have the same
     distributions if H0 is true) is violated. The proposed bootstrapped
     hypothesis testing method (#2 above) does not make this assumption.
-
-    References
-    ----------
-    .. [#2SeriesBoot_1] Chapter 11.6. Bootstrap Resampling for Hypothesis Tests.
-       In: Essential Statistical Inference: Theory and Methods. Springer texts
-       in statistics. New York: Springer; 2013.
     """
 
     _use_parametric_summ_stats = {'means': True, 'medians': False}
@@ -622,14 +561,10 @@ class TwoSampleBootstrap(TwoSeriesBootstrap):
 
     Attributes
     ----------
-    _df : pd.DataFrame
-       Concatenated DataFrame with NaNs dropped.
     x : pd.Series
        Grouping variable.
     y : pd.Series
        Outcome variable.
-    _test_x : bool
-       Test group level.
 
     Raises
     ------
@@ -680,7 +615,7 @@ class TwoSampleBootstrap(TwoSeriesBootstrap):
     via a bootstrapped methodology, in addition to the bootstrapped distribution
     under the Ha (used to estimate CIs), one must also use some method to
     bootstrap the null distribution in order to calculate p-value. Boos &
-    Stefanski (2013) [#2SampleBoot_1]_ suggest 2 methods, as summarized in this
+    Stefanski (2013) :cite:`boos_11_6` suggest 2 methods, as summarized in this
     `lecture by Alex Kaizer <https://www.alexkaizer.com/bios_6618/files/bios6618/W16/bootstrap_pvalue.pdf>`_:
 
     1. Combine all test and control observations (e.g. Hgb value for both blunt
@@ -737,12 +672,6 @@ class TwoSampleBootstrap(TwoSeriesBootstrap):
     (that test & control groups are exchangeable; that is, they have the same
     distributions if H0 is true) is violated. The proposed bootstrapped
     hypothesis testing method (#2 above) does not make this assumption.
-
-    References
-    ----------
-    .. [#2SampleBoot_1] Chapter 11.6. Bootstrap Resampling for Hypothesis Tests.
-       In: Essential Statistical Inference: Theory and Methods. Springer texts
-       in statistics. New York: Springer; 2013.
     """
 
     def __init__(self,
@@ -882,8 +811,8 @@ class TwoSeriesPermutation:
         Significance level. Defaults to 0.05.
     n_resamples : int, optional
         Number of permutations. Defaults to 10,000.
-    rng : int, optional
-        Random seed. Defaults to 519.
+    rng : int, default 519
+        Random seed.
 
     Attributes
     ----------
@@ -1331,27 +1260,23 @@ class TwoSamplePermutation(TwoSeriesPermutation):
         Boolean grouping.
     num_y : pd.Series
         Continuous outcome.
-    test_type : {'means', 'medians', 't_welch', 'mwu'}, optional
-        Test type. Defaults to 'means'.
-    alpha_level : float, optional
-        Significance level. Defaults to 0.05.
-    n_resamples : int, optional
-        Permutations. Defaults to 10,000.
-    rng : int, optional
-        Seed. Defaults to 519.
-    x_test_lvl : bool, optional
-        Test level. Defaults to True.
+    test_type : {'means', 'medians', 't_welch', 'mwu'}, default 'means'
+        Test type.
+    alpha_level : float, default 0.05
+        Significance level.
+    n_resamples : int, default 10_000
+        Permutations..
+    rng : int, default 519
+        Random seed.
+    x_test_lvl : bool, default True
+        Test level.
 
     Attributes
     ----------
-    _df : pd.DataFrame
-        Concatenated data.
     x : pd.Series
         Grouping.
     y : pd.Series
         Outcome.
-    _test_x : bool
-        Test level.
 
     Raises
     ------
