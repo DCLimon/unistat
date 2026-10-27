@@ -11,7 +11,7 @@ dependencies = [
     "numpy>=2.0.0",
     "pandas>=3.0.0",
     "scipy>=1.10.0",
-    "statsmodels>=0.14.0",
+    "statsmodels>=0.14.6",
     "patsy>=1.0.1"
 ]
 

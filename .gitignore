@@ -3,8 +3,6 @@
 # Reference: https://intellij-support.jetbrains.com/hc/en-us/articles/206544839
 
 # Environment
-.python-version
-uv.lock
 main.py
 build_checklist.md
 

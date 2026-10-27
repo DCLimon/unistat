@@ -11,7 +11,7 @@ import polars as pl
 
 # Module Options ===============================================================
 
-working_parquet_path = r'tests\data\test_data_wb_calcium.parquet'
+working_parquet_path = 'tests/data/test_data_wb_calcium.parquet'
 
 
 ################################################################################
@@ -25,7 +25,7 @@ class IRLData:
     def __init__(self, path: pathlib.Path | None = None):
         self.path = path or (
             pathlib.Path(working_parquet_path)
-        )
+        ).resolve()
         self.df = None
 
     def import_parquet(self) -> pl.DataFrame:
